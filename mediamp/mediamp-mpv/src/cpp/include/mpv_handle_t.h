@@ -20,9 +20,17 @@
 #include <windows.h>
 #include <gl/GL.h>
 #endif
+
+#ifdef __linux__
+#include <EGL/egl.h>
+#include <GL/gl.h>
+#include <dlfcn.h>
+#endif
+
 #include "compatible_thread.h"
 #include "global_lock.h"
 #include "log.h"
+#include <memory>
 
 namespace mediampv {
 
@@ -53,8 +61,9 @@ bool attach_window_surface(int64_t wid);
 bool detach_window_surface();
 #endif
 
-// Render API (Windows x64 only)
-bool create_render_context(HDC device, HGLRC context);
+#if defined(_WIN32) || defined(__linux__)
+// Render API (Windows x64 / Linux)
+bool create_render_context(uintptr_t device_ptr, uintptr_t context_ptr);
 bool destroy_render_context();
 
 GLuint create_texture(int width, int height);
@@ -63,6 +72,7 @@ bool release_texture();
 bool render_frame();
 bool debug_render_solid(float red, float green, float blue, float alpha);
 std::string read_texture_stats();
+#endif
 
 private:
 JavaVM *jvm_;
@@ -75,14 +85,22 @@ bool surface_attached_ = false;
 jobject surface_;
 #endif
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(__linux__)
 mpv_render_context *render_context_ = nullptr;
-HGLRC context_ = nullptr;
-HDC device_ = nullptr;
+uintptr_t context_ = 0;
 
 GLuint fbo_ = 0, texture_ = 0;
 int width_ = 0, height_ = 0;
 CREATE_LOCK(texture_lock);
+#endif
+
+#ifdef _WIN32
+HDC device_ = nullptr;
+#endif
+
+#ifdef __linux__
+EGLDisplay display_ = EGL_NO_DISPLAY;
+EGLSurface pbuffer_surface_ = EGL_NO_SURFACE;
 #endif
 
 std::shared_ptr<mediampv::compatible_thread> event_thread_;

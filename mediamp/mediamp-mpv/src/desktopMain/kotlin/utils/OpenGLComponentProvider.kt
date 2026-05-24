@@ -13,33 +13,38 @@ import org.jetbrains.skia.DirectContext
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.context.ContextHandler
 import org.jetbrains.skiko.context.OpenGLContextHandler
-import org.jetbrains.skiko.redrawer.WindowsOpenGLRedrawer
 
 class OpenGLComponentProvider(private val skiaLayer: SkiaLayer) {
-    private val openglRedrawer: WindowsOpenGLRedrawer = skiaLayer.redrawer as WindowsOpenGLRedrawer
+    private val redrawer = skiaLayer.redrawer ?: error("SkiaLayer redrawer is null")
+    private val redrawerClass = redrawer::class.java
 
-    private val deviceHandleField = WindowsOpenGLRedrawer::class.java
-        .getDeclaredField("device")
-        .also { it.isAccessible = true }
+    private val isLinux: Boolean =
+        System.getProperty("os.name")?.lowercase()?.contains("nux") == true
 
-    private val glContextHandleField = WindowsOpenGLRedrawer::class.java
+    // On Windows: WindowsOpenGLRedrawer has both "device" (HDC) and "context" (HGLRC)
+    // On Linux: LinuxOpenGLRedrawer has "context" (EGLContext) but no "device" field
+    private val deviceHandleField = if (!isLinux) {
+        redrawerClass.getDeclaredField("device").also { it.isAccessible = true }
+    } else null
+
+    private val glContextHandleField = redrawerClass
         .getDeclaredField("context")
         .also { it.isAccessible = true }
 
-    private val contextHandlerHandleField = WindowsOpenGLRedrawer::class.java
+    private val contextHandlerHandleField = redrawerClass
         .getDeclaredField("contextHandler")
         .also { it.isAccessible = true }
     private val directContextHandler = ContextHandler::class.java
         .getDeclaredField("context")
         .also { it.isAccessible = true }
 
-    val glDevice: Long get() = deviceHandleField.getLong(openglRedrawer)
-    val glContext: Long get() = glContextHandleField.getLong(openglRedrawer)
+    val glDevice: Long get() = deviceHandleField?.getLong(redrawer) ?: 0L
+    val glContext: Long get() = glContextHandleField.getLong(redrawer)
     val contextSignature: String get() = "$glDevice:$glContext"
     val contentScale: Float get() = skiaLayer.contentScale
     val currentDpi: Int get() = skiaLayer.currentDPI
 
     val directContext: DirectContext
-        get() = (contextHandlerHandleField.get(openglRedrawer) as OpenGLContextHandler)
+        get() = (contextHandlerHandleField.get(redrawer) as OpenGLContextHandler)
             .let { directContextHandler.get(it) as DirectContext }
 }

@@ -677,7 +677,7 @@ val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime"
         val appDirectory = appDir.get().asFile
         val nativeDirectory = nativeDir.get().asFile
         val launcherDirectory = launcherDir.get().asFile
-        val cfgFile = appDirectory.resolve("Nuvio.cfg")
+        val cfgFile = launcherDirectory.resolve("lib/app/Nuvio.cfg")
         if (!cfgFile.isFile) return@doLast
 
         val libraryPathOption = "java-options=-Djava.library.path=\$APPDIR/native"

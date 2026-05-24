@@ -18,6 +18,13 @@
 #include <gl/GL.h>
 #endif
 
+#ifdef __linux__
+#include <EGL/egl.h>
+#include <GL/gl.h>
+#include <GL/glx.h>
+#include <dlfcn.h>
+#endif
+
 extern "C" {
 #include <libavcodec/jni.h>
 }
@@ -33,9 +40,17 @@ extern "C" {
 
 namespace mediampv {
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
 bool release_texture_impl(GLuint* texture_id, GLuint* framebuffer_object);
 static void* get_proc_address_mpv(void* ctx, const char* name);
+
+#ifndef APIENTRY
+#ifdef _WIN32
+#define APIENTRY __stdcall
+#else
+#define APIENTRY
+#endif
+#endif
 
 #define GL_FRAMEBUFFER            0x8D40
 #define GL_COLOR_ATTACHMENT0      0x8CE0
@@ -218,33 +233,35 @@ return false;
 
 #ifdef __ANDROID__
 bool mpv_handle_t::attach_window_surface(int64_t wid) {
-FP;
-CHECK_HANDLE();
-return mpv_set_option(handle_, "wid", MPV_FORMAT_INT64, &wid) >= 0;
+	FP;
+	CHECK_HANDLE();
+	return mpv_set_option(handle_, "wid", MPV_FORMAT_INT64, &wid) >= 0;
 }
 
 bool mpv_handle_t::detach_window_surface() {
-FP;
-CHECK_HANDLE();
-int64_t wid = 0;
-return mpv_set_option(handle_, "wid", MPV_FORMAT_INT64, &wid) >= 0;
+	FP;
+	CHECK_HANDLE();
+	int64_t wid = 0;
+	return mpv_set_option(handle_, "wid", MPV_FORMAT_INT64, &wid) >= 0;
 }
 #endif
 
-bool mpv_handle_t::create_render_context(HDC device, HGLRC context) {
+#if defined(_WIN32) || defined(__linux__)
+bool mpv_handle_t::create_render_context(uintptr_t device_ptr, uintptr_t context_ptr) {
 FP;
 CHECK_HANDLE()
 
-#ifdef _WIN32
 if (render_context_)
 return true;
 
-device_ = device;
-context_ = context;
+context_ = context_ptr;
+
+#ifdef _WIN32
+device_ = reinterpret_cast<HDC>(device_ptr);
 
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-wglMakeCurrent(device_, context_);
+wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 
 if (!load_gl_functions()) {
 LOG("Failed to load OpenGL functions");
@@ -270,15 +287,88 @@ MPV_RENDER_PARAM_INVALID, nullptr
 
 if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
 render_context_ = nullptr;
+wglMakeCurrent(old_dc, old_ctx);
 return false;
 }
 
 wglMakeCurrent(old_dc, old_ctx);
 
-return true;
-#else
+#elif defined(__linux__)
+display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+if (display_ == EGL_NO_DISPLAY) {
+LOG("eglGetDisplay failed");
 return false;
+}
+
+auto egl_ctx = reinterpret_cast<EGLContext>(context_);
+
+// Make the EGL context current (try surfaceless first, fall back to pbuffer)
+if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_ctx)) {
+EGLint configAttribs[] = {
+EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+EGL_NONE
+};
+EGLConfig config;
+EGLint numConfigs;
+if (!eglChooseConfig(display_, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+LOG("eglChooseConfig failed");
+return false;
+}
+EGLint pbufferAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+pbuffer_surface_ = eglCreatePbufferSurface(display_, config, pbufferAttribs);
+if (pbuffer_surface_ == EGL_NO_SURFACE) {
+LOG("eglCreatePbufferSurface failed");
+return false;
+}
+if (!eglMakeCurrent(display_, pbuffer_surface_, pbuffer_surface_, egl_ctx)) {
+LOG("eglMakeCurrent failed (pbuffer)");
+eglDestroySurface(display_, pbuffer_surface_);
+pbuffer_surface_ = EGL_NO_SURFACE;
+return false;
+}
+}
+
+if (!load_gl_functions()) {
+LOG("Failed to load OpenGL functions");
+eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+if (pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(display_, pbuffer_surface_);
+pbuffer_surface_ = EGL_NO_SURFACE;
+}
+return false;
+}
+
+mpv_opengl_init_params gl_init_params{
+.get_proc_address = get_proc_address_mpv,
+.get_proc_address_ctx = nullptr
+};
+mpv_render_param params[] = {
+{
+MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)
+},
+{
+MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params
+},
+{
+MPV_RENDER_PARAM_INVALID, nullptr
+},
+};
+
+if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
+render_context_ = nullptr;
+eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+if (pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(display_, pbuffer_surface_);
+pbuffer_surface_ = EGL_NO_SURFACE;
+}
+return false;
+}
+
+// Leave context current for subsequent GL operations
 #endif
+
+return true;
 }
 
 #ifdef _WIN32
@@ -292,6 +382,17 @@ addr = (void*)GetProcAddress(opengl32, name);
 }
 return addr;
 }
+#elif defined(__linux__)
+static void* get_proc_address_mpv(void* ctx, const char* name) {
+void* addr = (void*)eglGetProcAddress(name);
+if (!addr) {
+addr = (void*)glXGetProcAddress((const GLubyte*)name);
+}
+if (!addr) {
+addr = dlsym(RTLD_DEFAULT, name);
+}
+return addr;
+}
 #endif
 
 bool mpv_handle_t::destroy_render_context() {
@@ -301,13 +402,25 @@ CHECK_HANDLE()
 if (!render_context_)
 return false;
 
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-wglMakeCurrent(device_, context_);
+wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
+#elif defined(__linux__)
+eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+#endif
 
 mpv_render_context_free(render_context_);
 
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+if (pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(display_, pbuffer_surface_);
+pbuffer_surface_ = EGL_NO_SURFACE;
+}
+eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+#endif
 
 render_context_ = nullptr;
 return true;
@@ -318,12 +431,19 @@ FP;
 CHECK_HANDLE_RETURN_INT()
 LOCK(texture_lock);
 
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-if (!wglMakeCurrent(device_, context_)) {
+if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 LOG("Failed to make OpenGL context current in create_texture");
 return 0;
 }
+#elif defined(__linux__)
+if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+LOG("Failed to make EGL context current in create_texture");
+return 0;
+}
+#endif
 
 GLuint old_texture = texture_;
 GLuint old_fbo = fbo_;
@@ -348,7 +468,9 @@ if (status != GL_FRAMEBUFFER_COMPLETE) {
 LOG("Framebuffer not complete in create_texture: 0x%x", status);
 release_texture_impl(&new_texture, &new_fbo);
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 return 0;
 }
 
@@ -363,7 +485,9 @@ release_texture_impl(&old_texture, &old_fbo);
 }
 
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 
 return texture_;
 }
@@ -376,14 +500,19 @@ LOCK(texture_lock);
 width_ = 0;
 height_ = 0;
 
-
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-wglMakeCurrent(device_, context_);
+wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
+#elif defined(__linux__)
+eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+#endif
 
 bool released = release_texture_impl(&texture_, &fbo_);
 
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 
 return released;
 }
@@ -406,22 +535,36 @@ bool mpv_handle_t::render_frame() {
 CHECK_HANDLE()
 LOCK(texture_lock);
 
+#ifdef _WIN32
 if (!render_context_ || !context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
+#elif defined(__linux__)
+if (!render_context_ || !context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+return false;
+#endif
 
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-if (!wglMakeCurrent(device_, context_)) {
+if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 LOG("Failed to make OpenGL context current in render_frame");
 return false;
 }
+#elif defined(__linux__)
+if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+LOG("Failed to make EGL context current in render_frame");
+return false;
+}
+#endif
 
 // 绑定 FBO 并检查状态
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
 if (status != GL_FRAMEBUFFER_COMPLETE) {
 LOG("Framebuffer not complete: 0x%x", status);
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 return false;
 }
 
@@ -453,7 +596,9 @@ LOG("mpv_render_context_render failed: %d", render_result);
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 glFinish();
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 
 return render_result >= 0;
 }
@@ -462,21 +607,35 @@ bool mpv_handle_t::debug_render_solid(float red, float green, float blue, float 
 CHECK_HANDLE()
 LOCK(texture_lock);
 
+#ifdef _WIN32
 if (!context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
+#elif defined(__linux__)
+if (!context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+return false;
+#endif
 
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-if (!wglMakeCurrent(device_, context_)) {
+if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 LOG("Failed to make OpenGL context current in debug_render_solid");
 return false;
 }
+#elif defined(__linux__)
+if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+LOG("Failed to make EGL context current in debug_render_solid");
+return false;
+}
+#endif
 
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
 if (status != GL_FRAMEBUFFER_COMPLETE) {
 LOG("Framebuffer not complete in debug_render_solid: 0x%x", status);
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 return false;
 }
 
@@ -485,7 +644,9 @@ glClearColor(red, green, blue, alpha);
 glClear(GL_COLOR_BUFFER_BIT);
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 glFinish();
+#ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#endif
 
 return true;
 }
@@ -493,47 +654,62 @@ return true;
 std::string mpv_handle_t::read_texture_stats() {
 LOCK(texture_lock);
 
+#ifdef _WIN32
 if (!context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return "unavailable";
+#elif defined(__linux__)
+if (!context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+return "unavailable";
+#endif
 
+#ifdef _WIN32
 HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
-if (!wglMakeCurrent(device_, context_)) {
+if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 return "wglMakeCurrent=false";
 }
+#elif defined(__linux__)
+if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+return "eglMakeCurrent=false";
+}
+#endif
 
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
-if (status != GL_FRAMEBUFFER_COMPLETE) {
-std::ostringstream failed;
-failed << "fboStatus=0x" << std::hex << status;
-wglMakeCurrent(old_dc, old_ctx);
-return failed.str();
-}
+	GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		std::ostringstream failed;
+		failed << "fboStatus=0x" << std::hex << status;
+#ifdef _WIN32
+		wglMakeCurrent(old_dc, old_ctx);
+#endif
+		return failed.str();
+	}
 
-int sample_width = width_ < 64 ? width_ : 64;
-int sample_height = height_ < 64 ? height_ : 64;
-std::vector<unsigned char> pixels(sample_width * sample_height * 4);
-glReadPixels(0, 0, sample_width, sample_height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	int sample_width = width_ < 64 ? width_ : 64;
+	int sample_height = height_ < 64 ? height_ : 64;
+	std::vector<unsigned char> pixels(sample_width * sample_height * 4);
+	glReadPixels(0, 0, sample_width, sample_height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-long long sum_r = 0;
-long long sum_g = 0;
-long long sum_b = 0;
-long long non_black = 0;
-for (int i = 0; i < sample_width * sample_height; ++i) {
-unsigned char r = pixels[i * 4];
-unsigned char g = pixels[i * 4 + 1];
-unsigned char b = pixels[i * 4 + 2];
-sum_r += r;
-sum_g += g;
-sum_b += b;
-if (r > 3 || g > 3 || b > 3) {
-non_black++;
-}
-}
+	long long sum_r = 0;
+	long long sum_g = 0;
+	long long sum_b = 0;
+	long long non_black = 0;
+	for (int i = 0; i < sample_width * sample_height; ++i) {
+		unsigned char r = pixels[i * 4];
+		unsigned char g = pixels[i * 4 + 1];
+		unsigned char b = pixels[i * 4 + 2];
+		sum_r += r;
+		sum_g += g;
+		sum_b += b;
+		if (r > 3 || g > 3 || b > 3) {
+			non_black++;
+		}
+	}
 
-pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
-wglMakeCurrent(old_dc, old_ctx);
+	pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
+#ifdef _WIN32
+	wglMakeCurrent(old_dc, old_ctx);
+#endif
 
 int count = sample_width * sample_height;
 std::ostringstream result;
@@ -541,8 +717,9 @@ result << "size=" << width_ << "x" << height_
 << " sample=" << sample_width << "x" << sample_height
 << " avgRgb=" << (sum_r / count) << "," << (sum_g / count) << "," << (sum_b / count)
 << " nonBlack=" << non_black << "/" << count;
-return result.str();
+	return result.str();
 }
+#endif
 
 bool mpv_handle_t::destroy(JNIEnv *env) {
 FP;

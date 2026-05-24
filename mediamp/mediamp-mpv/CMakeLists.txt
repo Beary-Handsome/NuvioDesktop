@@ -124,6 +124,9 @@ else()
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE
                 opengl32)
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+                EGL GL dl)
     endif()
 endif()
 

@@ -174,6 +174,12 @@ actual class MpvMediampPlayer(
                 handle.option("vo", "libmpv")
             }
 
+            is Platform.Linux -> {
+                handle.option("ao", "pulseaudio,alsa")
+                handle.option("vo", "libmpv")
+                handle.option("gpu-context", "x11egl")
+            }
+
             else -> {}
         }
 
