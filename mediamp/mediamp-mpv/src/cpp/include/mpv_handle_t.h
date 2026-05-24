@@ -24,6 +24,8 @@
 #ifdef __linux__
 #include <EGL/egl.h>
 #include <GL/gl.h>
+#include <GL/glx.h>
+#include <X11/Xlib.h>
 #include <dlfcn.h>
 #endif
 
@@ -99,8 +101,11 @@ HDC device_ = nullptr;
 #endif
 
 #ifdef __linux__
-EGLDisplay display_ = EGL_NO_DISPLAY;
-EGLSurface pbuffer_surface_ = EGL_NO_SURFACE;
+bool using_egl_ = true;
+EGLDisplay egl_display_ = EGL_NO_DISPLAY;
+EGLSurface egl_pbuffer_surface_ = EGL_NO_SURFACE;
+Display* glx_display_ = nullptr;
+GLXDrawable glx_drawable_ = None;
 #endif
 
 std::shared_ptr<mediampv::compatible_thread> event_thread_;

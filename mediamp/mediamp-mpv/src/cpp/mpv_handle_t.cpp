@@ -294,16 +294,20 @@ return false;
 wglMakeCurrent(old_dc, old_ctx);
 
 #elif defined(__linux__)
-display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-if (display_ == EGL_NO_DISPLAY) {
-LOG("eglGetDisplay failed");
-return false;
-}
+using_egl_ = true;
+egl_display_ = EGL_NO_DISPLAY;
+egl_pbuffer_surface_ = EGL_NO_SURFACE;
+glx_display_ = nullptr;
 
-auto egl_ctx = reinterpret_cast<EGLContext>(context_);
+auto ctx_ptr = reinterpret_cast<void*>(context_);
 
-// Make the EGL context current (try surfaceless first, fall back to pbuffer)
-if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_ctx)) {
+// Try EGL first
+{
+EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+if (dpy != EGL_NO_DISPLAY) {
+auto egl_ctx = reinterpret_cast<EGLContext>(ctx_ptr);
+bool egl_ok = eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_ctx);
+if (!egl_ok) {
 EGLint configAttribs[] = {
 EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
 EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
@@ -311,30 +315,65 @@ EGL_NONE
 };
 EGLConfig config;
 EGLint numConfigs;
-if (!eglChooseConfig(display_, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
-LOG("eglChooseConfig failed");
+if (eglChooseConfig(dpy, configAttribs, &config, 1, &numConfigs) && numConfigs > 0) {
+EGLint pbAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+EGLSurface pb = eglCreatePbufferSurface(dpy, config, pbAttribs);
+if (pb != EGL_NO_SURFACE) {
+egl_ok = eglMakeCurrent(dpy, pb, pb, egl_ctx);
+if (egl_ok) {
+egl_pbuffer_surface_ = pb;
+} else {
+eglDestroySurface(dpy, pb);
+}
+}
+}
+}
+if (egl_ok) {
+egl_display_ = dpy;
+}
+}
+}
+
+// If EGL failed, try GLX
+if (egl_display_ == EGL_NO_DISPLAY) {
+Display* dpy = XOpenDisplay(nullptr);
+if (dpy) {
+auto glx_ctx = reinterpret_cast<GLXContext>(ctx_ptr);
+// pbuffer fallback: create a 1x1 GLXPbuffer if surfaceless fails
+int fbAttribs[] = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_DOUBLEBUFFER, False, None};
+int fbCount;
+GLXFBConfig* fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), fbAttribs, &fbCount);
+GLXDrawable drawable = None;
+if (fbc && fbCount > 0) {
+int pbAttribs[] = {GLX_PBUFFER_WIDTH, 1, GLX_PBUFFER_HEIGHT, 1, None};
+drawable = glXCreatePbuffer(dpy, fbc[0], pbAttribs);
+XFree(fbc);
+}
+bool glx_ok = glXMakeCurrent(dpy, drawable, glx_ctx);
+if (glx_ok) {
+using_egl_ = false;
+glx_display_ = dpy;
+glx_drawable_ = drawable;
+} else {
+if (drawable != None) glXDestroyPbuffer(dpy, drawable);
+XCloseDisplay(dpy);
 return false;
 }
-EGLint pbufferAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
-pbuffer_surface_ = eglCreatePbufferSurface(display_, config, pbufferAttribs);
-if (pbuffer_surface_ == EGL_NO_SURFACE) {
-LOG("eglCreatePbufferSurface failed");
-return false;
-}
-if (!eglMakeCurrent(display_, pbuffer_surface_, pbuffer_surface_, egl_ctx)) {
-LOG("eglMakeCurrent failed (pbuffer)");
-eglDestroySurface(display_, pbuffer_surface_);
-pbuffer_surface_ = EGL_NO_SURFACE;
+} else {
 return false;
 }
 }
 
 if (!load_gl_functions()) {
 LOG("Failed to load OpenGL functions");
-eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-if (pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(display_, pbuffer_surface_);
-pbuffer_surface_ = EGL_NO_SURFACE;
+if (using_egl_) {
+eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+egl_pbuffer_surface_ = EGL_NO_SURFACE;
+}
+} else {
+glXMakeCurrent(glx_display_, None, nullptr);
 }
 return false;
 }
@@ -357,15 +396,22 @@ MPV_RENDER_PARAM_INVALID, nullptr
 
 if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
 render_context_ = nullptr;
-eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-if (pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(display_, pbuffer_surface_);
-pbuffer_surface_ = EGL_NO_SURFACE;
+if (using_egl_) {
+eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+egl_pbuffer_surface_ = EGL_NO_SURFACE;
+}
+} else {
+if (glx_display_) {
+GLXDrawable drawable = glXGetCurrentDrawable();
+glXMakeCurrent(glx_display_, None, nullptr);
+if (drawable != None) glXDestroyPbuffer(glx_display_, drawable);
+}
 }
 return false;
 }
 
-// Leave context current for subsequent GL operations
 #endif
 
 return true;
@@ -407,7 +453,11 @@ HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
 wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 #elif defined(__linux__)
-eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+if (using_egl_) {
+eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+} else {
+glXMakeCurrent(glx_display_, glXGetCurrentDrawable(), reinterpret_cast<GLXContext>(context_));
+}
 #endif
 
 mpv_render_context_free(render_context_);
@@ -415,11 +465,21 @@ mpv_render_context_free(render_context_);
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
 #elif defined(__linux__)
-if (pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(display_, pbuffer_surface_);
-pbuffer_surface_ = EGL_NO_SURFACE;
+if (using_egl_) {
+if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
+eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+egl_pbuffer_surface_ = EGL_NO_SURFACE;
 }
-eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+} else {
+if (glx_display_) {
+GLXDrawable drawable = glXGetCurrentDrawable();
+glXMakeCurrent(glx_display_, None, nullptr);
+if (drawable != None) glXDestroyPbuffer(glx_display_, drawable);
+XCloseDisplay(glx_display_);
+glx_display_ = nullptr;
+}
+}
 #endif
 
 render_context_ = nullptr;
@@ -439,8 +499,9 @@ LOG("Failed to make OpenGL context current in create_texture");
 return 0;
 }
 #elif defined(__linux__)
-if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
-LOG("Failed to make EGL context current in create_texture");
+if (using_egl_ ? !eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
+: !glXMakeCurrent(glx_display_, glXGetCurrentDrawable(), reinterpret_cast<GLXContext>(context_))) {
+LOG("Failed to make context current in create_texture");
 return 0;
 }
 #endif
@@ -505,7 +566,11 @@ HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
 wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 #elif defined(__linux__)
-eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+if (using_egl_) {
+eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+} else {
+glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+}
 #endif
 
 bool released = release_texture_impl(&texture_, &fbo_);
@@ -539,7 +604,7 @@ LOCK(texture_lock);
 if (!render_context_ || !context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
 #elif defined(__linux__)
-if (!render_context_ || !context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+if (!render_context_ || !context_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
 #endif
 
@@ -551,8 +616,11 @@ LOG("Failed to make OpenGL context current in render_frame");
 return false;
 }
 #elif defined(__linux__)
-if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
-LOG("Failed to make EGL context current in render_frame");
+bool ctx_ok = using_egl_
+? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
+: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+if (!ctx_ok) {
+LOG("Failed to make context current in render_frame");
 return false;
 }
 #endif
@@ -611,7 +679,7 @@ LOCK(texture_lock);
 if (!context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
 #elif defined(__linux__)
-if (!context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+if (!context_ || !fbo_ || !texture_ || !width_ || !height_)
 return false;
 #endif
 
@@ -623,8 +691,11 @@ LOG("Failed to make OpenGL context current in debug_render_solid");
 return false;
 }
 #elif defined(__linux__)
-if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
-LOG("Failed to make EGL context current in debug_render_solid");
+bool ctx_ok = using_egl_
+? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
+: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+if (!ctx_ok) {
+LOG("Failed to make context current in debug_render_solid");
 return false;
 }
 #endif
@@ -658,7 +729,7 @@ LOCK(texture_lock);
 if (!context_ || !device_ || !fbo_ || !texture_ || !width_ || !height_)
 return "unavailable";
 #elif defined(__linux__)
-if (!context_ || !display_ || !fbo_ || !texture_ || !width_ || !height_)
+if (!context_ || !fbo_ || !texture_ || !width_ || !height_)
 return "unavailable";
 #endif
 
@@ -669,8 +740,11 @@ if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 return "wglMakeCurrent=false";
 }
 #elif defined(__linux__)
-if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
-return "eglMakeCurrent=false";
+bool ctx_ok = using_egl_
+? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
+: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+if (!ctx_ok) {
+return using_egl_ ? "eglMakeCurrent=false" : "glXMakeCurrent=false";
 }
 #endif
 
