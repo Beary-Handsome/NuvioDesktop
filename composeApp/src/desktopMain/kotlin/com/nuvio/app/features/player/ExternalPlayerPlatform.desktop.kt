@@ -68,13 +68,43 @@ internal actual object ExternalPlayerPlatform {
 
     private fun windowsPlayers(): List<ExternalPlayerApp> {
         val players = mutableListOf<ExternalPlayerApp>()
-        if (isExecutableInPath("vlc.exe")) players.add(ExternalPlayerApp("vlc.exe", "VLC"))
-        if (isExecutableInPath("mpv.exe")) players.add(ExternalPlayerApp("mpv.exe", "MPV"))
-        if (players.isEmpty()) {
-            if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
-            if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
+        val checked = mutableSetOf<String>()
+
+        fun addIfFound(id: String, name: String): Boolean {
+            if (id in checked) return false
+            checked.add(id)
+            val found = isExecutableInPath(id) || isExecutableAtCommonPath(id)
+            if (found) players.add(ExternalPlayerApp(id, name))
+            return found
         }
+
+        addIfFound("vlc.exe", "VLC")
+        addIfFound("mpv.exe", "MPV")
+        addIfFound("mpv.com", "MPV")
+        if (!checked.any { it.startsWith("vlc") }) addIfFound("vlc", "VLC")
+        if (!checked.any { it.startsWith("mpv") }) addIfFound("mpv", "MPV")
         return players
+    }
+
+    private fun isExecutableAtCommonPath(name: String): Boolean {
+        val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
+        val programFilesX86 = System.getenv("ProgramFiles(x86)") ?: "C:\\Program Files (x86)"
+        val localAppData = System.getenv("LOCALAPPDATA") ?: "${System.getProperty("user.home")}\\AppData\\Local"
+
+        val commonDirs = listOf(
+            "$programFiles\\VideoLAN\\VLC",
+            "$programFilesX86\\VideoLAN\\VLC",
+            "$localAppData\\Programs\\VLC",
+            "$programFiles\\mpv",
+            "$programFiles\\mpv.net",
+            "$programFiles\\MPV",
+            "$programFiles\\MPlayer",
+            "$programFiles\\MPlayer for Windows",
+            "$localAppData\\mpv",
+            "$localAppData\\Programs\\mpv",
+        )
+
+        return commonDirs.any { dir -> File(dir, name).canExecute() }
     }
 
     private fun macPlayers(): List<ExternalPlayerApp> {
