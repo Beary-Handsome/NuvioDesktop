@@ -61,32 +61,30 @@ internal actual object ExternalPlayerPlatform {
 
     private fun linuxPlayers(): List<ExternalPlayerApp> {
         val players = mutableListOf<ExternalPlayerApp>()
-        if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
-        if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
+        resolveInPath("vlc")?.let { players.add(ExternalPlayerApp(it, "VLC")) }
+        resolveInPath("mpv")?.let { players.add(ExternalPlayerApp(it, "MPV")) }
         return players
     }
 
     private fun windowsPlayers(): List<ExternalPlayerApp> {
         val players = mutableListOf<ExternalPlayerApp>()
-        val checked = mutableSetOf<String>()
 
-        fun addIfFound(id: String, name: String): Boolean {
-            if (id in checked) return false
-            checked.add(id)
-            val found = isExecutableInPath(id) || isExecutableAtCommonPath(id)
-            if (found) players.add(ExternalPlayerApp(id, name))
-            return found
+        fun addIfFound(vararg names: String, displayName: String) {
+            for (name in names) {
+                val resolved = resolveInPath(name) ?: resolveAtCommonPath(name)
+                if (resolved != null) {
+                    players.add(ExternalPlayerApp(resolved, displayName))
+                    return
+                }
+            }
         }
 
-        addIfFound("vlc.exe", "VLC")
-        addIfFound("mpv.exe", "MPV")
-        addIfFound("mpv.com", "MPV")
-        if (!checked.any { it.startsWith("vlc") }) addIfFound("vlc", "VLC")
-        if (!checked.any { it.startsWith("mpv") }) addIfFound("mpv", "MPV")
+        addIfFound("vlc.exe", "vlc", displayName = "VLC")
+        addIfFound("mpv.exe", "mpv.com", "mpv", displayName = "MPV")
         return players
     }
 
-    private fun isExecutableAtCommonPath(name: String): Boolean {
+    private fun resolveAtCommonPath(name: String): String? {
         val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
         val programFilesX86 = System.getenv("ProgramFiles(x86)") ?: "C:\\Program Files (x86)"
         val localAppData = System.getenv("LOCALAPPDATA") ?: "${System.getProperty("user.home")}\\AppData\\Local"
@@ -104,20 +102,22 @@ internal actual object ExternalPlayerPlatform {
             "$localAppData\\Programs\\mpv",
         )
 
-        return commonDirs.any { dir -> File(dir, name).canExecute() }
+        return commonDirs.firstOrNull { dir -> File(dir, name).canExecute() }
+            ?.let { dir -> File(dir, name).absolutePath }
     }
 
     private fun macPlayers(): List<ExternalPlayerApp> {
         val players = mutableListOf<ExternalPlayerApp>()
-        if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
-        if (isExecutableInPath("iina")) players.add(ExternalPlayerApp("iina", "IINA"))
-        if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
+        resolveInPath("vlc")?.let { players.add(ExternalPlayerApp(it, "VLC")) }
+        resolveInPath("iina")?.let { players.add(ExternalPlayerApp(it, "IINA")) }
+        resolveInPath("mpv")?.let { players.add(ExternalPlayerApp(it, "MPV")) }
         return players
     }
 
-    private fun isExecutableInPath(name: String): Boolean {
-        val path = System.getenv("PATH") ?: return false
+    private fun resolveInPath(name: String): String? {
+        val path = System.getenv("PATH") ?: return null
         return path.split(File.pathSeparatorChar)
-            .any { dir -> File(dir, name).canExecute() }
+            .firstOrNull { dir -> File(dir, name).canExecute() }
+            ?.let { dir -> File(dir, name).absolutePath }
     }
 }
