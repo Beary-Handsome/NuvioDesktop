@@ -265,9 +265,12 @@ abstract class SyncWindowsPackageResourcesTask : DefaultTask() {
         val sidebarBmpTarget = targetRoot.resolve("BackgroundImage.bmp")
         sidebarBmpTarget.parentFile.mkdirs()
         val sidebarImage = ImageIO.read(sidebarPngFile)
-            ?: error("Unable to read Windows installer sidebar PNG: ${sidebarPngFile.absolutePath}")
-        check(ImageIO.write(sidebarImage, "bmp", sidebarBmpTarget)) {
-            "Unable to write WiX sidebar BMP: ${sidebarBmpTarget.absolutePath}"
+        if (sidebarImage != null && ImageIO.write(sidebarImage, "bmp", sidebarBmpTarget)) {
+            logger.info("WiX sidebar BMP written from PNG: ${sidebarBmpTarget.absolutePath}")
+        } else {
+            logger.warn("Could not convert sidebar PNG to BMP: ${sidebarPngFile.absolutePath}; using banner BMP as fallback")
+            val fallbackBmp = installerBannerBmp.get().asFile
+            fallbackBmp.copyTo(sidebarBmpTarget, overwrite = true)
         }
 
         val bannerBmpFile = installerBannerBmp.get().asFile

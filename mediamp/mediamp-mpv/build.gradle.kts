@@ -16,14 +16,16 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     kotlin("multiplatform")
-    id("com.android.library")
-
     kotlin("plugin.compose")
     id("org.jetbrains.compose")
-
     `mpp-lib-targets`
     id(libs.plugins.vanniktech.mavenPublish.get().pluginId)
     idea
+}
+
+val hasAndroidSdk = System.getenv("ANDROID_HOME") != null || System.getenv("ANDROID_SDK_ROOT") != null
+if (hasAndroidSdk) {
+    apply(plugin = "com.android.library")
 }
 
 description = "MediaMP backend using MPV"
@@ -50,9 +52,6 @@ kotlin {
                 implementation(projects.mediampInternalUtils)
             }
         }
-        getByName("jvmMain").dependencies {
-
-        }
         desktopMain.dependencies {
             api(libs.jna.platform)
         }
@@ -63,29 +62,27 @@ kotlin {
 //    java.setSrcDirs(listOf("gen/java"))
 //}
 
-android {
-    namespace = "org.openani.mediamp.mpv"
-    defaultConfig {
-        ndk {
-            // Specifies the ABI configurations of your native
-            // libraries Gradle should build and package with your app.
-            abiFilters.clear()
-            //noinspection ChromeOsAbiSupport
-            abiFilters += archs
+if (hasAndroidSdk) {
+    extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+        namespace = "org.openani.mediamp.mpv"
+        defaultConfig {
+            ndk {
+                abiFilters.clear()
+                abiFilters += archs
+            }
         }
-    }
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            //noinspection ChromeOsAbiSupport
-            include(*archs.toTypedArray())
-            isUniversalApk = true // 额外构建一个
+        splits {
+            abi {
+                isEnable = true
+                reset()
+                include(*archs.toTypedArray())
+                isUniversalApk = true
+            }
         }
-    }
-    externalNativeBuild {
-        cmake {
-            path = projectDir.resolve("CMakeLists.txt")
+        externalNativeBuild {
+            cmake {
+                path = projectDir.resolve("CMakeLists.txt")
+            }
         }
     }
 }
@@ -253,11 +250,20 @@ tasks.named("assemble") {
     dependsOn(copyNativeJarForCurrentPlatform)
 }
 
+if (hasAndroidSdk) {
 mavenPublishing {
     configure(KotlinMultiplatform(JavadocJar.Empty(), true, androidVariantsToPublish = listOf("release", "debug")))
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublicationsIfEnabled(project)
     configurePom(project)
+}
+} else {
+mavenPublishing {
+    configure(KotlinMultiplatform(JavadocJar.Empty(), true))
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublicationsIfEnabled(project)
+    configurePom(project)
+}
 }
 
 tasks

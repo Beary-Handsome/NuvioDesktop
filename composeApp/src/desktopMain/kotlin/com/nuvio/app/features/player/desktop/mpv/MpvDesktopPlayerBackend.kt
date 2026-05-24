@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import com.nuvio.app.desktop.DesktopPlayerRegistry
 import com.nuvio.app.desktop.DesktopRuntimeLog
 import com.nuvio.app.features.player.AudioTrack
+import com.nuvio.app.features.player.PlayerAudioLevel
 import com.nuvio.app.features.player.PlayerEngineController
 import com.nuvio.app.features.player.PlayerResizeMode
 import com.nuvio.app.features.player.SubtitleStyleState
@@ -13,6 +14,7 @@ import com.nuvio.app.features.player.SubtitleTrack
 import com.nuvio.app.features.player.desktop.DesktopPlayerBackend
 import com.nuvio.app.features.player.desktop.DesktopPlayerError
 import com.nuvio.app.features.player.desktop.DesktopPlayerPhase
+import com.nuvio.app.features.player.desktop.WindowsDisplayWakeLock
 import com.nuvio.app.features.player.desktop.DesktopPlayerRequest
 import com.nuvio.app.features.player.desktop.DesktopPlayerState
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +76,7 @@ internal class MpvDesktopPlayerBackend private constructor(
     @Volatile private var nativeClosed = false
     @Volatile private var currentRequest: DesktopPlayerRequest? = null
     @Volatile private var externalSubtitleActive = false
+    @Volatile private var displayWakeLockHeld = false
     @Volatile private var latestSubtitleStyle = SubtitleStyleState.DEFAULT
     private val externalSubtitleRequestCounter = AtomicInteger(0)
     private val externalSubtitleTempFiles = mutableSetOf<Path>()
@@ -122,6 +125,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             DesktopRuntimeLog.info("MPV load success session=${request.sessionKey}")
         }.onFailure { throwable ->
             DesktopRuntimeLog.error("MPV load failed source=${request.sourceUrl.redactedMediaUrl()}", throwable)
+            releaseDisplayWakeLock("load-failed")
             fail(DesktopPlayerError.MediaLoadFailed(backendName, "MPV media load failed", throwable))
         }
     }
@@ -137,6 +141,7 @@ internal class MpvDesktopPlayerBackend private constructor(
         if (stopped) return
         stopped = true
         DesktopRuntimeLog.info("MPV releaseSoft id=$id")
+        releaseDisplayWakeLock("releaseSoft")
         resetExternalSubtitleState("releaseSoft")
         runCatching { player.impl.setPropertyBoolean("mute", true) }
         runCatching { player.impl.command("stop") }
@@ -146,6 +151,7 @@ internal class MpvDesktopPlayerBackend private constructor(
 
     override fun close() {
         if (nativeClosed) return
+        releaseDisplayWakeLock("close")
         resetExternalSubtitleState("close")
         nativeClosed = true
         scope.cancel()
@@ -190,17 +196,36 @@ internal class MpvDesktopPlayerBackend private constructor(
             )
         }.onEach { mapped ->
             if (!nativeClosed) {
+                updateDisplayWakeLock(mapped.phase)
+                DesktopRuntimeLog.info("[WP-STATE] phase=${mapped.phase} pos=${mapped.positionMs}ms dur=${mapped.durationMs}ms")
                 stateFlow.value = mapped
             }
         }.launchIn(scope)
     }
 
     private fun fail(error: DesktopPlayerError) {
+        releaseDisplayWakeLock("fail-${error::class.simpleName}")
         stateFlow.value = stateFlow.value.copy(
             phase = DesktopPlayerPhase.Error,
             error = error,
             diagnostics = error.technicalMessage,
         )
+    }
+
+    private fun updateDisplayWakeLock(phase: DesktopPlayerPhase) {
+        if (phase == DesktopPlayerPhase.Playing) {
+            if (!displayWakeLockHeld) {
+                displayWakeLockHeld = WindowsDisplayWakeLock.acquire("$backendName:$id:$phase")
+            }
+        } else {
+            releaseDisplayWakeLock("phase-$phase")
+        }
+    }
+
+    private fun releaseDisplayWakeLock(reason: String) {
+        if (!displayWakeLockHeld) return
+        displayWakeLockHeld = false
+        WindowsDisplayWakeLock.release("$backendName:$id:$reason")
     }
 
     private fun canReceiveCommands(): Boolean =
@@ -270,6 +295,33 @@ internal class MpvDesktopPlayerBackend private constructor(
         override fun setPlaybackSpeed(speed: Float) {
             if (!canReceiveCommands()) return
             player.features[PlaybackSpeed]?.set(speed.coerceIn(0.25f, 4.0f))
+        }
+
+        override fun currentVolume(): PlayerAudioLevel? {
+            if (!canReceiveCommands()) return null
+            val volume = player.impl.getMpvStringProperty("volume")
+                .toDoubleOrNull()
+                ?.div(100.0)
+                ?.toFloat()
+                ?.coerceIn(0f, 1f)
+                ?: return null
+            val muted = player.impl.getMpvBooleanProperty("mute")
+            return PlayerAudioLevel(
+                fraction = volume,
+                isMuted = muted || volume <= 0.001f,
+            )
+        }
+
+        override fun setVolume(level: Float): PlayerAudioLevel? {
+            if (!canReceiveCommands()) return null
+            val target = level.coerceIn(0f, 1f)
+            runCatching {
+                player.impl.setMpvProperty("volume", (target * 100.0).coerceIn(0.0, 100.0))
+                player.impl.setMpvProperty("mute", target <= 0.001f)
+            }.onFailure {
+                DesktopRuntimeLog.error("MPV controller setVolume failed target=$target", it)
+            }
+            return currentVolume()
         }
 
         override fun getAudioTracks(): List<AudioTrack> =

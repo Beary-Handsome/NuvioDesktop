@@ -86,7 +86,7 @@ kotlinMultiplatformExtension?.apply {
 
     } else {
         if (enableJvmTarget) {
-            jvm {
+            jvm("desktop") {
                 configureJvmOptions()
             }
         }

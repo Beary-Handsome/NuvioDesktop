@@ -506,6 +506,7 @@ fun PlayerScreen(
         }
 
         fun flushWatchProgress() {
+            PlayerRuntimeTrace.info("[WP-FLUSH] videoId=${playbackSession.videoId} pos=${playbackSnapshot.positionMs}ms dur=${playbackSnapshot.durationMs}ms isEnded=${playbackSnapshot.isEnded}")
             emitStopScrobbleForCurrentProgress()
             WatchProgressRepository.flushPlaybackProgress(
                 session = playbackSession,
@@ -785,10 +786,10 @@ fun PlayerScreen(
         }
 
         fun currentPlayerVolume(): PlayerAudioLevel? =
-            gestureController?.currentVolume()
+            playerController?.currentVolume() ?: gestureController?.currentVolume()
 
         fun setPlayerVolume(level: Float) {
-            val nextLevel = gestureController?.setVolume(level)
+            val nextLevel = playerController?.setVolume(level) ?: gestureController?.setVolume(level)
             if (nextLevel != null) {
                 visibleVolumeLevel = nextLevel
                 if (!nextLevel.isMuted && nextLevel.fraction > 0.001f) {
@@ -1790,16 +1791,22 @@ fun PlayerScreen(
             val episode = activeEpisodeNumber
             val vid = activeVideoId
 
-            if (season == null || episode == null || vid == null) return@LaunchedEffect
+            PlayerRuntimeTrace.info("[SKIP-INTRO] query vid=$vid season=$season episode=$episode")
+            if (season == null || episode == null || vid == null) {
+                PlayerRuntimeTrace.info("[SKIP-INTRO] ABORT null params")
+                return@LaunchedEffect
+            }
 
             launch {
                 val imdbId = vid.split(":").firstOrNull()?.takeIf { it.startsWith("tt") }
+                PlayerRuntimeTrace.info("[SKIP-INTRO] imdbId=$imdbId")
                 val intervals = SkipIntroRepository.getSkipIntervals(
                     imdbId = imdbId,
                     season = season,
                     episode = episode,
                 )
                 skipIntervals = intervals
+                PlayerRuntimeTrace.info("[SKIP-INTRO] result count=${intervals.size}")
             }
         }
 
@@ -1911,6 +1918,25 @@ fun PlayerScreen(
         LaunchedEffect(fullscreenController.isFullscreen) {
             playerFocusRequester.requestFocus()
         }
+
+        BindPlayerKeyboardShortcuts(
+            enabled = !usesAnimatedPlayerChrome,
+            handlers = PlayerKeyboardShortcutHandlers(
+                toggleFullscreen = ::toggleFullscreen,
+                togglePlayback = ::togglePlayback,
+                seekForward = { seekBy(10_000L) },
+                seekBackward = { seekBy(-10_000L) },
+                volumeUp = { adjustVolume(0.05f) },
+                volumeDown = { adjustVolume(-0.05f) },
+                toggleMute = ::toggleMute,
+                cyclePlaybackSpeed = ::cyclePlaybackSpeed,
+                playNextEpisode = {
+                    nextEpisodeAutoPlayJob?.cancel()
+                    playNextEpisode()
+                },
+                skipActiveSegment = ::skipActiveSegment,
+            ),
+        )
 
         Box(
             modifier = Modifier

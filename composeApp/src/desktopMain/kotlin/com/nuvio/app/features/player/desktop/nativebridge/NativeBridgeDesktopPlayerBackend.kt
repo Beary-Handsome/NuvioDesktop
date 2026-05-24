@@ -18,6 +18,7 @@ import com.nuvio.app.desktop.DesktopRuntimeLog
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.player.AddonSubtitle
 import com.nuvio.app.features.player.AudioTrack
+import com.nuvio.app.features.player.PlayerAudioLevel
 import com.nuvio.app.features.player.PlayerEngineController
 import com.nuvio.app.features.player.PlayerResizeMode
 import com.nuvio.app.features.player.PlayerSettingsRepository
@@ -29,6 +30,7 @@ import com.nuvio.app.features.player.desktop.DesktopPlayerError
 import com.nuvio.app.features.player.desktop.DesktopPlayerPhase
 import com.nuvio.app.features.player.desktop.DesktopPlayerRequest
 import com.nuvio.app.features.player.desktop.DesktopPlayerState
+import com.nuvio.app.features.player.desktop.WindowsDisplayWakeLock
 import com.nuvio.app.features.player.desktop.mpv.redactedMediaUrl
 import com.nuvio.app.features.streams.AddonStreamGroup
 import com.nuvio.app.features.streams.StreamItem
@@ -58,6 +60,7 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
 
     @Volatile private var closed = false
     @Volatile private var attached = false
+    @Volatile private var displayWakeLockHeld = false
 
     private var onCloseCallback: (() -> Unit)? = null
     private var onAddonSubtitlesFetchCallback: (() -> Unit)? = null
@@ -93,6 +96,7 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
             setResizeMode(request.resizeMode)
             if (request.playWhenReady) bridge.nuvio_player_play(playerPtr) else bridge.nuvio_player_pause(playerPtr)
         }.onFailure {
+            releaseDisplayWakeLock("load-failed")
             stateFlow.value = stateFlow.value.copy(
                 phase = DesktopPlayerPhase.Error,
                 error = DesktopPlayerError.MediaLoadFailed(backendName, "Native bridge media load failed", it),
@@ -112,11 +116,13 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
 
     override fun releaseSoft() {
         if (closed) return
+        releaseDisplayWakeLock("releaseSoft")
         runCatching { bridge.nuvio_player_pause(playerPtr) }
     }
 
     override fun close() {
         if (closed) return
+        releaseDisplayWakeLock("close")
         closed = true
         scope.cancel()
         runCatching { bridge.nuvio_player_destroy(playerPtr) }
@@ -201,7 +207,7 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
                     close()
                     break
                 }
-                stateFlow.value = DesktopPlayerState(
+                val nextState = DesktopPlayerState(
                     phase = when {
                         pollState.error != null -> DesktopPlayerPhase.Error
                         pollState.snapshot.isEnded -> DesktopPlayerPhase.Ended
@@ -216,6 +222,8 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
                     backendName = backendName,
                     error = pollState.error?.let { DesktopPlayerError.PlaybackFailed(backendName, it) },
                 )
+                updateDisplayWakeLock(nextState.phase)
+                stateFlow.value = nextState
                 if (pollState.addonSubtitlesFetchRequested) onAddonSubtitlesFetchCallback?.invoke()
                 if (pollState.subtitleStyleChanged) {
                     val colorIndex = pollState.subtitleStyleColorIndex.coerceIn(0, SubtitleColorSwatches.lastIndex)
@@ -249,6 +257,8 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
         override fun seekBy(offsetMs: Long) = runIfOpen { bridge.nuvio_player_seek_by(playerPtr, offsetMs) }
         override fun retry() = runIfOpen { bridge.nuvio_player_retry(playerPtr) }
         override fun setPlaybackSpeed(speed: Float) = runIfOpen { bridge.nuvio_player_set_speed(playerPtr, speed) }
+        override fun currentVolume(): PlayerAudioLevel? = null
+        override fun setVolume(level: Float): PlayerAudioLevel? = null
         override fun getAudioTracks(): List<AudioTrack> = if (closed) emptyList() else (0 until bridge.nuvio_player_get_audio_track_count(playerPtr)).map { index ->
             AudioTrack(index, bridge.nuvio_player_get_audio_track_id(playerPtr, index).toString(), bridge.nuvio_player_get_audio_track_label(playerPtr, index) ?: "", bridge.nuvio_player_get_audio_track_lang(playerPtr, index), bridge.nuvio_player_is_audio_track_selected(playerPtr, index))
         }
@@ -305,6 +315,22 @@ internal class NativeBridgeDesktopPlayerBackend private constructor(
         private fun runIfOpen(block: () -> Unit) {
             if (!closed) runCatching(block).onFailure { DesktopRuntimeLog.error("Native bridge controller command failed", it) }
         }
+    }
+
+    private fun updateDisplayWakeLock(phase: DesktopPlayerPhase) {
+        if (phase == DesktopPlayerPhase.Playing) {
+            if (!displayWakeLockHeld) {
+                displayWakeLockHeld = WindowsDisplayWakeLock.acquire("$backendName:$id:$phase")
+            }
+        } else {
+            releaseDisplayWakeLock("phase-$phase")
+        }
+    }
+
+    private fun releaseDisplayWakeLock(reason: String) {
+        if (!displayWakeLockHeld) return
+        displayWakeLockHeld = false
+        WindowsDisplayWakeLock.release("$backendName:$id:$reason")
     }
 
     companion object {
