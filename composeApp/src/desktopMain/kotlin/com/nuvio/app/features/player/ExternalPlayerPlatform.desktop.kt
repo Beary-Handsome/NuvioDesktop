@@ -3,9 +3,9 @@ package com.nuvio.app.features.player
 import java.io.File
 
 internal actual object ExternalPlayerPlatform {
-    actual fun defaultPlayerId(): String? = linuxPlayers().firstOrNull()?.id
+    actual fun defaultPlayerId(): String? = desktopPlayers().firstOrNull()?.id
 
-    actual fun availablePlayers(): List<ExternalPlayerApp> = linuxPlayers()
+    actual fun availablePlayers(): List<ExternalPlayerApp> = desktopPlayers()
 
     actual fun open(
         request: ExternalPlayerPlaybackRequest,
@@ -26,6 +26,11 @@ internal actual object ExternalPlayerPlatform {
             executable.contains("mpv") || executable.contains("celluloid") -> {
                 args.add(request.sourceUrl)
             }
+            executable.contains("iina") -> {
+                args.add("--no-stdin")
+                args.add("--keep-running")
+                args.add(request.sourceUrl)
+            }
             else -> {
                 args.add(request.sourceUrl)
             }
@@ -41,13 +46,41 @@ internal actual object ExternalPlayerPlatform {
         }
     }
 
-    private fun isLinux(): Boolean =
-        System.getProperty("os.name")?.lowercase()?.contains("nux") == true
+    private fun osName(): String =
+        System.getProperty("os.name")?.lowercase().orEmpty()
+
+    private fun desktopPlayers(): List<ExternalPlayerApp> {
+        val os = osName()
+        return when {
+            os.contains("nux") -> linuxPlayers()
+            os.contains("win") -> windowsPlayers()
+            os.contains("mac") -> macPlayers()
+            else -> emptyList()
+        }
+    }
 
     private fun linuxPlayers(): List<ExternalPlayerApp> {
-        if (!isLinux()) return emptyList()
         val players = mutableListOf<ExternalPlayerApp>()
         if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
+        if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
+        return players
+    }
+
+    private fun windowsPlayers(): List<ExternalPlayerApp> {
+        val players = mutableListOf<ExternalPlayerApp>()
+        if (isExecutableInPath("vlc.exe")) players.add(ExternalPlayerApp("vlc.exe", "VLC"))
+        if (isExecutableInPath("mpv.exe")) players.add(ExternalPlayerApp("mpv.exe", "MPV"))
+        if (players.isEmpty()) {
+            if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
+            if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
+        }
+        return players
+    }
+
+    private fun macPlayers(): List<ExternalPlayerApp> {
+        val players = mutableListOf<ExternalPlayerApp>()
+        if (isExecutableInPath("vlc")) players.add(ExternalPlayerApp("vlc", "VLC"))
+        if (isExecutableInPath("iina")) players.add(ExternalPlayerApp("iina", "IINA"))
         if (isExecutableInPath("mpv")) players.add(ExternalPlayerApp("mpv", "MPV"))
         return players
     }

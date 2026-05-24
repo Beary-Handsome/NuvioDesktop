@@ -209,11 +209,7 @@ object WatchProgressRepository {
                     return@runCatching
                 }
                 val oldLocal = entriesByVideoId.toMap()
-                val newMap = if (isIncrementalPull) {
-                    entriesByVideoId.toMutableMap()
-                } else {
-                    mutableMapOf()
-                }
+                val newMap = entriesByVideoId.toMutableMap()
 
                 serverEntries.forEach { entry ->
                     newMap[entry.videoId] = entry.toWatchProgressEntry(cached = oldLocal[entry.videoId])

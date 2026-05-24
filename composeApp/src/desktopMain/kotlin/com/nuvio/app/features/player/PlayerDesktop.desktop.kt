@@ -1064,8 +1064,8 @@ actual fun ManageFullscreenKeyboardShortcuts(
         val mouseListener = AWTEventListener { awtEvent ->
             if (awtEvent.id != MouseEvent.MOUSE_PRESSED) return@AWTEventListener
             val mouseEvent = awtEvent as? MouseEvent ?: return@AWTEventListener
-            val isSideButton = mouseEvent.button == 4 ||
-                mouseEvent.button == 5
+            // Windows: 4,5  |  Linux/X11: 6-9 typically for back/forward
+            val isSideButton = mouseEvent.button in 4..9
             if (!isSideButton) return@AWTEventListener
             if (!composeWindow.isFocused) return@AWTEventListener
             if (composeWindow.isPlayerFullscreen()) {

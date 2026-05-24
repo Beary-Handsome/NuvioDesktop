@@ -199,6 +199,16 @@ actual class MpvMediampPlayer(
         // workaround for <https://github.com/mpv-player/mpv/issues/14651>
         handle.option("vd-lavc-film-grain", "cpu")
 
+        when (currentPlatform()) {
+            is Platform.Windows, is Platform.MacOS, is Platform.Linux -> {
+                handle.option("tone-mapping", "bt.2390")
+                handle.option("target-peak", "100")
+                handle.option("hdr-compute-peak", "yes")
+                handle.option("tone-mapping-param", "default")
+            }
+            else -> {}
+        }
+
         handle.initialize()
 
         handle.option("save-position-on-quit", "no")

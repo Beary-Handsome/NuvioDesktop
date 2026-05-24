@@ -6,6 +6,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.Base64
 import kotlin.io.path.createDirectories
+import kotlin.io.path.createTempFile
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.exists
 import kotlin.io.path.inputStream
@@ -52,7 +53,15 @@ internal object DesktopPreferences {
 
     @Synchronized
     fun putString(namespace: String, key: String, value: String) {
-        keyFile(namespace, key).writeText(value, StandardCharsets.UTF_8)
+        val target = keyFile(namespace, key)
+        val temp = target.parent.resolve("tmp_${target.fileName}")
+        temp.writeText(value, StandardCharsets.UTF_8)
+        try {
+            temp.toFile().renameTo(target.toFile())
+        } catch (_: Exception) {
+            target.writeText(value, StandardCharsets.UTF_8)
+            runCatching { temp.deleteExisting() }
+        }
     }
 
     fun putNullableString(namespace: String, key: String, value: String?) {
