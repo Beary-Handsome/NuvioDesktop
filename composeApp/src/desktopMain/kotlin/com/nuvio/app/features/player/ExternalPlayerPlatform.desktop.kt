@@ -31,6 +31,10 @@ internal actual object ExternalPlayerPlatform {
                 args.add("--keep-running")
                 args.add(request.sourceUrl)
             }
+            executable.contains("kodi") -> {
+                args.add("--play")
+                args.add(request.sourceUrl)
+            }
             else -> {
                 args.add(request.sourceUrl)
             }
@@ -63,6 +67,7 @@ internal actual object ExternalPlayerPlatform {
         val players = mutableListOf<ExternalPlayerApp>()
         resolveInPath("vlc")?.let { players.add(ExternalPlayerApp(it, "VLC")) }
         resolveInPath("mpv")?.let { players.add(ExternalPlayerApp(it, "MPV")) }
+        resolveInPath("kodi")?.let { players.add(ExternalPlayerApp(it, "Kodi")) }
         return players
     }
 
@@ -81,6 +86,7 @@ internal actual object ExternalPlayerPlatform {
 
         addIfFound("vlc.exe", "vlc", displayName = "VLC")
         addIfFound("mpv.exe", "mpv.com", "mpv", displayName = "MPV")
+        addIfFound("kodi.exe", "kodi", displayName = "Kodi")
         return players
     }
 
@@ -100,6 +106,9 @@ internal actual object ExternalPlayerPlatform {
             "$programFiles\\MPlayer for Windows",
             "$localAppData\\mpv",
             "$localAppData\\Programs\\mpv",
+            "$programFiles\\Kodi",
+            "$programFilesX86\\Kodi",
+            "$localAppData\\Programs\\Kodi",
         )
 
         return commonDirs.firstOrNull { dir -> File(dir, name).canExecute() }
@@ -111,6 +120,7 @@ internal actual object ExternalPlayerPlatform {
         resolveInPath("vlc")?.let { players.add(ExternalPlayerApp(it, "VLC")) }
         resolveInPath("iina")?.let { players.add(ExternalPlayerApp(it, "IINA")) }
         resolveInPath("mpv")?.let { players.add(ExternalPlayerApp(it, "MPV")) }
+        resolveInPath("kodi")?.let { players.add(ExternalPlayerApp(it, "Kodi")) }
         return players
     }
 
