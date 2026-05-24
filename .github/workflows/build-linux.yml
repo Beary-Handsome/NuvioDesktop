@@ -1,0 +1,99 @@
+name: Build Linux (.deb)
+
+on:
+  push:
+    branches:
+      - windows-experimental
+      - master
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            cmake ninja-build \
+            libmpv-dev \
+            libavcodec-dev libavformat-dev libavutil-dev \
+            libswscale-dev \
+            libavfilter-dev libpostproc-dev libswresample-dev \
+            libxv-dev xvfb
+
+      - name: Prepare native libs for mediamp
+        run: |
+          LINUX_LIB_DIR="mediamp/mediamp-mpv/libmpv/lib/linux/x86_64"
+          mkdir -p "$LINUX_LIB_DIR"
+          for lib in libmpv libavcodec libavformat libavutil libswscale libswresample libpostproc; do
+            src="/usr/lib/x86_64-linux-gnu/${lib}.so"
+            if [ -f "$src" ] || [ -L "$src" ]; then
+              cp -L "$src" "$LINUX_LIB_DIR/${lib}.so"
+            fi
+          done
+          # also copy any .so.* files that the symlinks may need at runtime
+          for sofile in /usr/lib/x86_64-linux-gnu/libmpv.so.* /usr/lib/x86_64-linux-gnu/libavcodec.so.* /usr/lib/x86_64-linux-gnu/libavformat.so.* /usr/lib/x86_64-linux-gnu/libavutil.so.* /usr/lib/x86_64-linux-gnu/libswscale.so.* /usr/lib/x86_64-linux-gnu/libswresample.so.* /usr/lib/x86_64-linux-gnu/libpostproc.so.*; do
+            [ -f "$sofile" ] && cp -L "$sofile" "$LINUX_LIB_DIR/"
+          done
+          ls -la "$LINUX_LIB_DIR/"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build distributable
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 3
+          ./gradlew :composeApp:createReleaseDistributable -x :composeApp:packageWindowsNativeRuntime --no-daemon --stacktrace
+
+      - name: Package .deb
+        run: |
+          export DISPLAY=:99
+          ./gradlew :composeApp:packageReleaseDeb --no-daemon --stacktrace
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-deb-package
+          path: composeApp/build/compose/binaries/main-release/deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-linux-portable
+          path: composeApp/build/compose/binaries/main-release/distributions/*.tar.gz
+          if-no-files-found: warn

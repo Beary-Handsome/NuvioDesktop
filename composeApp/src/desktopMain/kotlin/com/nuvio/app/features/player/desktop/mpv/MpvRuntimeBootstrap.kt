@@ -18,16 +18,10 @@ internal object MpvRuntimeBootstrap {
     private const val LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000
     private const val LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400
 
-    private val isWindows: Boolean
-        get() = System.getProperty("os.name")?.contains("Windows", ignoreCase = true) == true
-
     @Volatile private var bootstrappedDirectory: String? = null
 
     @Synchronized
     fun apply(runtime: MpvRuntimeResolution): MpvRuntimeBootstrapResult {
-        if (!isWindows) {
-            return MpvRuntimeBootstrapResult(success = true, diagnostics = runtime.diagnostics)
-        }
         val directory = runtime.directory
         if (directory == null || !runtime.available) {
             return MpvRuntimeBootstrapResult(
@@ -41,36 +35,38 @@ internal object MpvRuntimeBootstrap {
         }
 
         prependJavaLibraryPath(directory)
-        val kernel32 = runCatching { Native.load("kernel32", Kernel32::class.java) }
-            .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap cannot load kernel32", it) }
-            .getOrNull()
-        if (kernel32 != null) {
-            val flags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS or LOAD_LIBRARY_SEARCH_USER_DIRS
-            runCatching { kernel32.SetDefaultDllDirectories(flags) }
-                .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap SetDefaultDllDirectories failed", it) }
-            runCatching { kernel32.AddDllDirectory(WString(directory.absolutePath)) }
-                .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap AddDllDirectory failed dir=$normalized", it) }
-            runCatching { kernel32.SetDllDirectoryW(WString(directory.absolutePath)) }
-                .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap SetDllDirectoryW failed dir=$normalized", it) }
+        if (isOsWindows()) {
+            val kernel32 = runCatching { Native.load("kernel32", Kernel32::class.java) }
+                .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap cannot load kernel32", it) }
+                .getOrNull()
+            if (kernel32 != null) {
+                val flags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS or LOAD_LIBRARY_SEARCH_USER_DIRS
+                runCatching { kernel32.SetDefaultDllDirectories(flags) }
+                    .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap SetDefaultDllDirectories failed", it) }
+                runCatching { kernel32.AddDllDirectory(WString(directory.absolutePath)) }
+                    .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap AddDllDirectory failed dir=$normalized", it) }
+                runCatching { kernel32.SetDllDirectoryW(WString(directory.absolutePath)) }
+                    .onFailure { DesktopRuntimeLog.error("MPV runtime bootstrap SetDllDirectoryW failed dir=$normalized", it) }
+            }
         }
 
-        val mediampDll = directory.resolve("mediampv.dll")
+        val libraryFile = directory.resolve(runtimeLibraryName())
         return runCatching {
-            System.load(mediampDll.absolutePath)
+            System.load(libraryFile.absolutePath)
         }.fold(
             onSuccess = {
                 bootstrappedDirectory = normalized
-                DesktopRuntimeLog.info("MPV runtime bootstrap loaded dll=${mediampDll.safePath()}")
-                MpvRuntimeBootstrapResult(success = true, diagnostics = "loaded=${mediampDll.safePath()}")
+                DesktopRuntimeLog.info("MPV runtime bootstrap loaded=${libraryFile.safePath()}")
+                MpvRuntimeBootstrapResult(success = true, diagnostics = "loaded=${libraryFile.safePath()}")
             },
             onFailure = { throwable ->
                 if (throwable.message?.contains("already loaded", ignoreCase = true) == true) {
                     bootstrappedDirectory = normalized
-                    MpvRuntimeBootstrapResult(success = true, diagnostics = "already loaded dll=${mediampDll.safePath()}")
+                    MpvRuntimeBootstrapResult(success = true, diagnostics = "already loaded=${libraryFile.safePath()}")
                 } else {
                     MpvRuntimeBootstrapResult(
                         success = false,
-                        diagnostics = "System.load failed dll=${mediampDll.safePath()} runtime=${runtime.diagnostics}",
+                        diagnostics = "System.load failed=${libraryFile.safePath()} runtime=${runtime.diagnostics}",
                         error = throwable,
                     )
                 }

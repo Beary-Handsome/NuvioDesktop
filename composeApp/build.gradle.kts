@@ -515,6 +515,7 @@ compose.desktop {
             when {
                 hostOs.contains("windows") -> targetFormats(TargetFormat.Exe, TargetFormat.Msi)
                 hostOs.contains("mac") -> targetFormats(TargetFormat.Dmg)
+                hostOs.contains("nux") -> targetFormats(TargetFormat.Deb, TargetFormat.Rpm)
             }
 
             windows {
@@ -535,6 +536,12 @@ compose.desktop {
                         <false/>
                     """.trimIndent()
                 }
+            }
+
+            linux {
+                iconFile.set(project.file("desktop-icons/nuvio_window_icon.png"))
+                packageName = "nuvio"
+                packageVersion = releaseAppVersionName
             }
         }
     }
@@ -632,11 +639,76 @@ val packageWindowsNativeRuntime = tasks.register<Copy>("packageWindowsNativeRunt
 }
 
 tasks.matching { it.name == "createReleaseDistributable" }.configureEach {
-    finalizedBy(packageWindowsNativeRuntime)
+    if (System.getProperty("os.name").lowercase().contains("win")) {
+        finalizedBy(packageWindowsNativeRuntime)
+    }
+    if (System.getProperty("os.name").lowercase().contains("nux")) {
+        finalizedBy(packageLinuxNativeRuntime)
+    }
 }
 
-packageWindowsNativeRuntime.configure {
-    mustRunAfter(tasks.matching { it.name == "createReleaseDistributable" })
+if (System.getProperty("os.name").lowercase().contains("win")) {
+    packageWindowsNativeRuntime.configure {
+        mustRunAfter(tasks.matching { it.name == "createReleaseDistributable" })
+    }
+}
+
+val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime") {
+    val mediampRootDir = rootProject.file("mediamp")
+    val mediampNativeBuildDir = mediampRootDir.resolve("mediamp-mpv/build-ci")
+    val mediampPrebuiltDir = mediampRootDir.resolve("mediamp-mpv/libmpv/lib/linux/x86_64")
+    val appDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio/app")
+    val nativeDir = appDir.map { it.dir("native") }
+    val launcherDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio")
+
+    group = "compose desktop"
+    description = "Copies MediaMP/MPV native .so files into the Linux app image."
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(mediampNativeBuildDir) {
+        include("*.so")
+    }
+    from(mediampPrebuiltDir) {
+        include("*.so")
+    }
+    into(nativeDir)
+
+    doLast {
+        val appDirectory = appDir.get().asFile
+        val nativeDirectory = nativeDir.get().asFile
+        val launcherDirectory = launcherDir.get().asFile
+        val cfgFile = appDirectory.resolve("Nuvio.cfg")
+        if (!cfgFile.isFile) return@doLast
+
+        val libraryPathOption = "java-options=-Djava.library.path=\$APPDIR/native"
+        val lines = cfgFile.readLines()
+        var replaced = false
+        val patchedLines = lines.map { line ->
+            if (line.startsWith("java-options=-Djava.library.path=")) {
+                replaced = true
+                libraryPathOption
+            } else {
+                line
+            }
+        }.toMutableList()
+        if (!replaced) {
+            val javaOptionsIndex = patchedLines.indexOf("[JavaOptions]")
+            if (javaOptionsIndex >= 0) {
+                patchedLines.add(javaOptionsIndex + 1, libraryPathOption)
+            } else {
+                patchedLines.add("")
+                patchedLines.add("[JavaOptions]")
+                patchedLines.add(libraryPathOption)
+            }
+        }
+        cfgFile.writeText(patchedLines.joinToString(System.lineSeparator()) + System.lineSeparator())
+
+        nativeDirectory.listFiles { file -> file.isFile && file.name.endsWith(".so") }
+            .orEmpty()
+            .forEach { so ->
+                so.copyTo(launcherDirectory.resolve(so.name), overwrite = true)
+            }
+    }
 }
 
 val windowsPackageResourcesSource = layout.projectDirectory.dir("src/windowsPackageResources").asFile
@@ -672,8 +744,17 @@ syncWindowsPackageResources.configure {
     })
 }
 
+tasks.matching {
+    it.name == "packageReleaseDeb" || it.name == "packageReleaseRpm"
+}.configureEach {
+    dependsOn("createReleaseDistributable")
+    dependsOn(packageLinuxNativeRuntime)
+}
+
 tasks.matching { it.name == "runReleaseDistributable" }.configureEach {
-    dependsOn(packageWindowsNativeRuntime)
+    if (System.getProperty("os.name").lowercase().contains("win")) {
+        dependsOn(packageWindowsNativeRuntime)
+    }
 }
 
 val packageReleaseInnoExe = tasks.register<Exec>("packageReleaseInnoExe") {

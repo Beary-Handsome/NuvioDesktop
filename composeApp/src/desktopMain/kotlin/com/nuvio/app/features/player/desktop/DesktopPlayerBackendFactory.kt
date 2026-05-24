@@ -8,16 +8,18 @@ import com.nuvio.app.features.player.desktop.nativebridge.NativeBridgeDesktopPla
 import com.nuvio.app.features.player.desktop.nativebridge.NativeBridgeRuntimeLocator
 
 internal object DesktopPlayerBackendFactory {
-    private const val BACKEND_PROPERTY = "nuvio.windows.player.backend"
-    private const val BACKEND_ENV = "NUVIO_WINDOWS_PLAYER_BACKEND"
+    private const val BACKEND_PROPERTY = "nuvio.player.backend"
+    private const val BACKEND_ENV = "NUVIO_PLAYER_BACKEND"
+    private const val BACKEND_PROPERTY_LEGACY = "nuvio.windows.player.backend"
+    private const val BACKEND_ENV_LEGACY = "NUVIO_WINDOWS_PLAYER_BACKEND"
 
-    fun createWindowsBackend(): DesktopPlayerBackend {
+    fun createDesktopBackend(): DesktopPlayerBackend {
         val selection = DesktopPlayerBackendSelection.resolve()
-        DesktopRuntimeLog.info("Selected Windows player backend request=${selection.value} source=${selection.source}")
+        DesktopRuntimeLog.info("Selected player backend request=${selection.value} source=${selection.source}")
         return when (selection.backend) {
             DesktopPlayerBackendKind.None -> unavailable(
-                backendName = "windows-none",
-                technicalMessage = "Windows player backend disabled by configuration.",
+                backendName = "none",
+                technicalMessage = "Player backend disabled by configuration.",
                 selection = selection,
             )
             DesktopPlayerBackendKind.Mpv -> createMpvOrUnavailable(selection)
@@ -28,7 +30,7 @@ internal object DesktopPlayerBackendFactory {
 
     private fun createMpvOrUnavailable(selection: DesktopPlayerBackendSelection): DesktopPlayerBackend =
         createMpvOrNull(selection) ?: unavailable(
-            backendName = "windows-mediamp-mpv",
+            backendName = "mediamp-mpv",
             technicalMessage = "MPV backend is unavailable.",
             selection = selection,
         )
@@ -100,6 +102,10 @@ internal object DesktopPlayerBackendFactory {
                 if (!property.isNullOrBlank()) return fromValue(property, "system-property:$BACKEND_PROPERTY")
                 val env = System.getenv(BACKEND_ENV)?.trim()?.lowercase()
                 if (!env.isNullOrBlank()) return fromValue(env, "env:$BACKEND_ENV")
+                val propertyLegacy = System.getProperty(BACKEND_PROPERTY_LEGACY)?.trim()?.lowercase()
+                if (!propertyLegacy.isNullOrBlank()) return fromValue(propertyLegacy, "system-property:$BACKEND_PROPERTY_LEGACY")
+                val envLegacy = System.getenv(BACKEND_ENV_LEGACY)?.trim()?.lowercase()
+                if (!envLegacy.isNullOrBlank()) return fromValue(envLegacy, "env:$BACKEND_ENV_LEGACY")
                 return DesktopPlayerBackendSelection(DesktopPlayerBackendKind.Auto, "auto", "default")
             }
 

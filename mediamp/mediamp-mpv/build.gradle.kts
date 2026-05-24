@@ -197,7 +197,7 @@ tasks.withType(KotlinJvmCompile::class) {
 }
 
 
-val supportedOsTriples = listOf("macos-aarch64", "macos-x64", "windows-x64")
+val supportedOsTriples = listOf("linux-x64", "macos-aarch64", "macos-x64", "windows-x64")
 
 val nativeJarForCurrentPlatform = tasks.register("nativeJarForCurrentPlatform", Jar::class.java) {
     dependsOn(buildCMakeDesktop)

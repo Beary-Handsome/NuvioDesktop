@@ -2,27 +2,25 @@ package com.nuvio.app.features.player.desktop.mpv
 
 import java.io.File
 
+internal fun runtimeLibraryName(): String =
+    if (isOsWindows()) "mediampv.dll" else "libmediampv.so"
+
+internal fun isOsWindows(): Boolean =
+    System.getProperty("os.name")?.contains("Windows", ignoreCase = true) == true
+
+internal fun isOsLinux(): Boolean =
+    System.getProperty("os.name")?.lowercase()?.contains("nux") == true
+
 internal data class MpvRuntimeResolution(
     val directory: File?,
     val checkedDirectories: List<String>,
     val diagnostics: String,
 ) {
-    val available: Boolean get() = directory?.resolve("mediampv.dll")?.isFile == true
+    val available: Boolean get() = directory?.resolve(runtimeLibraryName())?.isFile == true
 }
 
 internal object MpvRuntimeLocator {
-    private val isWindows: Boolean
-        get() = System.getProperty("os.name")?.contains("Windows", ignoreCase = true) == true
-
     fun resolve(): MpvRuntimeResolution {
-        if (!isWindows) {
-            return MpvRuntimeResolution(
-                directory = null,
-                checkedDirectories = emptyList(),
-                diagnostics = "non-Windows platform; explicit MPV runtime bootstrap skipped",
-            )
-        }
-
         val candidates = linkedMapOf<String, File>()
         fun add(label: String, file: File?) {
             if (file != null) candidates.putIfAbsent(label, file)
@@ -46,6 +44,13 @@ internal object MpvRuntimeLocator {
             add("property:nuvio.mpv.dir/bin", dir.resolve("bin"))
         }
 
+        if (isOsLinux()) {
+            add("linux:/usr/lib/x86_64-linux-gnu/mediamp", File("/usr/lib/x86_64-linux-gnu/mediamp"))
+            add("linux:/usr/local/lib/mediamp", File("/usr/local/lib/mediamp"))
+            add("linux:/usr/lib/mediamp", File("/usr/lib/mediamp"))
+            add("env:LD_LIBRARY_PATH", System.getenv("LD_LIBRARY_PATH")?.toFileOrNull())
+        }
+
         javaLibraryPathEntries().forEach { entry ->
             val dir = File(entry)
             add("java.library.path:${dir.safePath()}", dir)
@@ -62,15 +67,21 @@ internal object MpvRuntimeLocator {
                 add("dev:app/native", base.resolve("app/native"))
                 add("dev:native", base.resolve("native"))
                 add("dev:mediamp/build-ci", base.resolve("mediamp/mediamp-mpv/build-ci"))
-                add("dev:mediamp/build-ci/Release", base.resolve("mediamp/mediamp-mpv/build-ci/Release"))
-                add("dev:mediamp/libmpv", base.resolve("mediamp/mediamp-mpv/libmpv/lib/windows/x86_64"))
+                if (isOsWindows()) {
+                    add("dev:mediamp/build-ci/Release", base.resolve("mediamp/mediamp-mpv/build-ci/Release"))
+                    add("dev:mediamp/libmpv", base.resolve("mediamp/mediamp-mpv/libmpv/lib/windows/x86_64"))
+                }
+                if (isOsLinux()) {
+                    add("dev:mediamp/build-ci", base.resolve("mediamp/mediamp-mpv/build-ci"))
+                }
             }
         }
 
+        val libName = runtimeLibraryName()
         val checked = candidates.map { (label, dir) ->
-            "$label=${dir.safePath()} exists=${dir.isDirectory} mediampv=${dir.resolve("mediampv.dll").isFile}"
+            "$label=${dir.safePath()} exists=${dir.isDirectory} $libName=${dir.resolve(libName).isFile}"
         }
-        val selected = candidates.values.firstOrNull { it.resolve("mediampv.dll").isFile }
+        val selected = candidates.values.firstOrNull { it.resolve(libName).isFile }
         return MpvRuntimeResolution(
             directory = selected,
             checkedDirectories = checked,
