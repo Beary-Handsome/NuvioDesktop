@@ -714,6 +714,7 @@ val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime"
     }
 }
 
+// AppImage packaging for Linux
 val packageReleaseAppImage = tasks.register("packageReleaseAppImage") {
     group = "compose desktop"
     description = "Builds a Linux AppImage from the release distribution using appimagetool."
