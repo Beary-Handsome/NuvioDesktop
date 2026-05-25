@@ -48,6 +48,7 @@ jobs:
       - name: Prepare native libs for mediamp
         run: |
           LINUX_LIB_DIR="mediamp/mediamp-mpv/libmpv/lib/linux/x86_64"
+          rm -rf "$LINUX_LIB_DIR"
           mkdir -p "$LINUX_LIB_DIR"
           for lib in libmpv libavcodec libavformat libavutil libswscale libswresample libpostproc; do
             src="/usr/lib/x86_64-linux-gnu/${lib}.so"
