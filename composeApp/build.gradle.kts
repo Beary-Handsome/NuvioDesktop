@@ -347,7 +347,10 @@ val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-con
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
-    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    val localProps = rootProject.layout.projectDirectory.file("local.properties")
+    if (localProps.asFile.exists()) {
+        localPropertiesFile.set(localProps)
+    }
     val releaseProperties = layout.projectDirectory.file("runtime-config/release.properties")
     if (releaseProperties.asFile.exists()) {
         releasePropertiesFile.set(releaseProperties)
