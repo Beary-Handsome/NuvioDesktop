@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.util.Base64
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempFile
@@ -21,15 +22,16 @@ internal object DesktopPreferences {
     private val keyEncoder = Base64.getUrlEncoder().withoutPadding()
 
     private val rootDir: Path by lazy {
-        Paths.get(
-            System.getProperty("user.home"),
-            "Library",
-            "Application Support",
-            "Nuvio",
-            "preferences",
-        ).apply {
-            createDirectories()
+        val osName = System.getProperty("os.name").lowercase()
+        val base = when {
+            osName.contains("win") ->
+                Paths.get(System.getenv("APPDATA") ?: "${System.getProperty("user.home")}\\AppData\\Roaming")
+            osName.contains("mac") ->
+                Paths.get(System.getProperty("user.home"), "Library", "Application Support")
+            else ->
+                Paths.get(System.getenv("XDG_CONFIG_HOME") ?: "${System.getProperty("user.home")}/.config")
         }
+        base.resolve("Nuvio").resolve("preferences").apply { createDirectories() }
     }
 
     private fun namespaceDir(namespace: String): Path =
@@ -57,12 +59,14 @@ internal object DesktopPreferences {
         val temp = target.parent.resolve("tmp_${target.fileName}")
         temp.writeText(value, StandardCharsets.UTF_8)
         try {
-            if (!temp.toFile().renameTo(target.toFile())) {
-                throw Exception("renameTo returned false")
-            }
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (_: Exception) {
-            target.writeText(value, StandardCharsets.UTF_8)
-            runCatching { temp.deleteExisting() }
+            try {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: Exception) {
+                target.writeText(value, StandardCharsets.UTF_8)
+                runCatching { temp.deleteExisting() }
+            }
         }
     }
 

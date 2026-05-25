@@ -583,6 +583,18 @@ val packageWindowsNativeRuntime = tasks.register<Copy>("packageWindowsNativeRunt
     }
     into(nativeDir)
 
+    val quickJsJar: java.io.File? = try {
+        project.configurations.getByName("runtimeClasspath").files
+            .firstOrNull { file -> file.name.contains("quickjs") && file.name.endsWith(".jar") }
+    } catch (_: Exception) { null }
+    if (quickJsJar != null) {
+        from(project.zipTree(quickJsJar)) {
+            include("jni/windows_x64/libquickjs.dll")
+            rename("libquickjs.dll", "quickjs.dll")
+            includeEmptyDirs = false
+        }
+    }
+
     doLast {
         val appDirectory = appDir.get().asFile
         val nativeDirectory = nativeDir.get().asFile
@@ -622,6 +634,7 @@ val packageWindowsNativeRuntime = tasks.register<Copy>("packageWindowsNativeRunt
         val requiredDlls = listOf(
             "mediampv.dll",
             "libmpv-2.dll",
+            "quickjs.dll",
             "avcodec-61.dll",
             "avformat-61.dll",
             "avutil-59.dll",
