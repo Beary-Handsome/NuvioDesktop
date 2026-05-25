@@ -77,14 +77,14 @@ jobs:
           export DISPLAY=:99
           Xvfb :99 -screen 0 1024x768x24 &
           sleep 3
-          # Unset ANDROID_HOME so the Android target is skipped (we only need desktop)
-          unset ANDROID_HOME
+          # Unset Android SDK env vars so Android targets are skipped (desktop-only build)
+          unset ANDROID_HOME ANDROID_SDK_ROOT
           ./gradlew :composeApp:createReleaseDistributable -x :composeApp:packageWindowsNativeRuntime --no-daemon --stacktrace
 
       - name: Package .deb
         run: |
           export DISPLAY=:99
-          unset ANDROID_HOME
+          unset ANDROID_HOME ANDROID_SDK_ROOT
           ./gradlew :composeApp:packageReleaseDeb --no-daemon --stacktrace
 
       - name: Upload .deb artifact
@@ -112,7 +112,7 @@ jobs:
 
       - name: Package AppImage
         run: |
-          unset ANDROID_HOME
+          unset ANDROID_HOME ANDROID_SDK_ROOT
           ./gradlew :composeApp:packageReleaseAppImage --no-daemon --stacktrace
 
       - name: Upload AppImage artifact
