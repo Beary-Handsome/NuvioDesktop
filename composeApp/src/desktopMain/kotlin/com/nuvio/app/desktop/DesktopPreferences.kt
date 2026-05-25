@@ -57,7 +57,9 @@ internal object DesktopPreferences {
         val temp = target.parent.resolve("tmp_${target.fileName}")
         temp.writeText(value, StandardCharsets.UTF_8)
         try {
-            temp.toFile().renameTo(target.toFile())
+            if (!temp.toFile().renameTo(target.toFile())) {
+                throw Exception("renameTo returned false")
+            }
         } catch (_: Exception) {
             target.writeText(value, StandardCharsets.UTF_8)
             runCatching { temp.deleteExisting() }

@@ -114,8 +114,6 @@ internal actual object ThemeSettingsStorage {
         DesktopPreferences.getString(preferencesName, ProfileScopedKey.of(selectedAppLanguageKey))
 }
 
-internal actual fun LazyListScope.pluginsSettingsContent() = Unit
-
 @Composable
 internal actual fun integrationLogoPainter(logo: IntegrationLogo): Painter =
     when (logo) {

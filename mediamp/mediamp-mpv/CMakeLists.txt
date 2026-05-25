@@ -148,6 +148,7 @@ endif ()
 foreach(dep ${MPV_LIBS_DEPS})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying ${dep}..."
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${MPV_OUTPUT_LIBS_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${dep}
             ${MPV_OUTPUT_LIBS_DIR}

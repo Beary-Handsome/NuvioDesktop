@@ -22,7 +22,7 @@ class OpenGLComponentProvider(private val skiaLayer: SkiaLayer) {
         System.getProperty("os.name")?.lowercase()?.contains("nux") == true
 
     // On Windows: WindowsOpenGLRedrawer has both "device" (HDC) and "context" (HGLRC)
-    // On Linux: LinuxOpenGLRedrawer has "context" (EGLContext) but no "device" field
+    // On Linux: LinuxOpenGLRedrawer has "context" (GLXContext) but no "device" field
     private val deviceHandleField = if (!isLinux) {
         redrawerClass.getDeclaredField("device").also { it.isAccessible = true }
     } else null
@@ -38,7 +38,32 @@ class OpenGLComponentProvider(private val skiaLayer: SkiaLayer) {
         .getDeclaredField("context")
         .also { it.isAccessible = true }
 
-    val glDevice: Long get() = deviceHandleField?.getLong(redrawer) ?: 0L
+    private val x11Display: Long get() {
+        if (!isLinux) return 0L
+        val backedLayer = skiaLayer.backedLayer ?: return 0L
+        return try {
+            val ktClass = Class.forName("org.jetbrains.skiko.AWTLinuxDrawingSurfaceKt")
+            val hwLayerClass = Class.forName("org.jetbrains.skiko.HardwareLayer")
+            val dsClass = Class.forName("org.jetbrains.skiko.LinuxDrawingSurface")
+
+            val lock = ktClass.getMethod("lockLinuxDrawingSurface", hwLayerClass)
+            val unlock = ktClass.getMethod("unlockLinuxDrawingSurface", dsClass)
+            val getDisplay = dsClass.getMethod("getDisplay")
+
+            val ds = lock.invoke(null, backedLayer)
+            try {
+                getDisplay.invoke(ds) as Long
+            } finally {
+                unlock.invoke(null, ds)
+            }
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    // On Linux, glDevice returns the X11 Display* so the native code can use
+    // Skiko's display connection for glXMakeCurrent (instead of XOpenDisplay).
+    val glDevice: Long get() = if (isLinux) x11Display else (deviceHandleField?.getLong(redrawer) ?: 0L)
     val glContext: Long get() = glContextHandleField.getLong(redrawer)
     val contextSignature: String get() = "$glDevice:$glContext"
     val contentScale: Float get() = skiaLayer.contentScale

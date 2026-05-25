@@ -1,4 +1,4 @@
-name: Build Linux (.deb)
+name: Build Linux
 
 on:
   push:
@@ -97,3 +97,23 @@ jobs:
           name: nuvio-linux-portable
           path: composeApp/build/compose/binaries/main-release/distributions/*.tar.gz
           if-no-files-found: warn
+
+      - name: Install appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          /tmp/appimagetool --appimage-extract > /dev/null 2>&1
+          sudo mv /tmp/squashfs-root/AppRun /usr/local/bin/appimagetool
+          rm -rf /tmp/squashfs-root /tmp/appimagetool
+          appimagetool --version
+
+      - name: Package AppImage
+        run: |
+          ./gradlew :composeApp:packageReleaseAppImage --no-daemon --stacktrace
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-appimage
+          path: composeApp/build/compose/binaries/main-release/appimage/*.AppImage
+          if-no-files-found: error

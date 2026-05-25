@@ -11,7 +11,7 @@
 #ifndef MEDIAMP_LOG_H
 #define MEDIAMP_LOG_H
 
-#define ENABLE_LOGGING
+// #define ENABLE_LOGGING
 
 #ifdef ENABLE_LOGGING
 #define LOG_TAG "mediampv"

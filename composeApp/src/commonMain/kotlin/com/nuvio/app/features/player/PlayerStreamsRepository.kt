@@ -235,7 +235,8 @@ object PlayerStreamsRepository {
 
         val job = scope.launch {
             val pendingStreamAddons = streamAddons.filterNot { it.addonId in warmedAddonIds }
-            val installedAddonIds = streamAddons.map { it.addonId }.toSet()
+            val pluginAddonIds = pluginScrapers.map { "plugin:${it.id}" }.toSet()
+            val installedAddonIds = streamAddons.map { it.addonId }.toSet() + pluginAddonIds
             val debridAvailabilityJobs = mutableListOf<Job>()
             fun emptyStateReason(groups: List<AddonStreamGroup>, anyLoading: Boolean) =
                 if (!anyLoading && groups.all { it.streams.isEmpty() }) {

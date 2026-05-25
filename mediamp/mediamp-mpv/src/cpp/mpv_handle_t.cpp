@@ -23,6 +23,7 @@
 #include <GL/gl.h>
 #include <GL/glx.h>
 #include <dlfcn.h>
+#include <cstdlib>
 #endif
 
 extern "C" {
@@ -107,7 +108,7 @@ handle_ = mpv_create();
 // use terminal log level but request verbose messages
 // this way --msg-level can be used to adjust later
 mpv_request_log_messages(handle_, "terminal-default");
-mpv_set_option_string(handle_, "msg-level", "all=v");
+// mpv_set_option_string(handle_, "msg-level", "all=v");
 }
 
 bool mpv_handle_t::initialize() {
@@ -294,123 +295,180 @@ return false;
 wglMakeCurrent(old_dc, old_ctx);
 
 #elif defined(__linux__)
-using_egl_ = true;
-egl_display_ = EGL_NO_DISPLAY;
-egl_pbuffer_surface_ = EGL_NO_SURFACE;
-glx_display_ = nullptr;
+	// Detect Wayland vs X11 at runtime
+	const char* wayland_env = std::getenv("WAYLAND_DISPLAY");
+	bool is_wayland = wayland_env && wayland_env[0] != '\0';
 
-auto ctx_ptr = reinterpret_cast<void*>(context_);
+	if (is_wayland) {
+		// ---- Wayland / EGL path ----
+		using_egl_ = true;
+		glx_display_ = nullptr;
+		glx_drawable_ = None;
+		egl_display_ = EGL_NO_DISPLAY;
+		egl_pbuffer_surface_ = EGL_NO_SURFACE;
 
-// Try EGL first
-{
-EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-if (dpy != EGL_NO_DISPLAY) {
-auto egl_ctx = reinterpret_cast<EGLContext>(ctx_ptr);
-bool egl_ok = eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_ctx);
-if (!egl_ok) {
-EGLint configAttribs[] = {
-EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-EGL_NONE
-};
-EGLConfig config;
-EGLint numConfigs;
-if (eglChooseConfig(dpy, configAttribs, &config, 1, &numConfigs) && numConfigs > 0) {
-EGLint pbAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
-EGLSurface pb = eglCreatePbufferSurface(dpy, config, pbAttribs);
-if (pb != EGL_NO_SURFACE) {
-egl_ok = eglMakeCurrent(dpy, pb, pb, egl_ctx);
-if (egl_ok) {
-egl_pbuffer_surface_ = pb;
-} else {
-eglDestroySurface(dpy, pb);
-}
-}
-}
-}
-if (egl_ok) {
-egl_display_ = dpy;
-}
-}
-}
+		// Prefer eglGetCurrentDisplay() (called from within Canvas callback).
+		// Fall back to eglGetDisplay() with the native wl_display* from Skiko.
+		egl_display_ = eglGetCurrentDisplay();
+		if (egl_display_ == EGL_NO_DISPLAY) {
+			egl_display_ = eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(device_ptr));
+		}
+		if (egl_display_ == EGL_NO_DISPLAY) {
+			LOG("EGL: no display available");
+			return false;
+		}
 
-// If EGL failed, try GLX
-if (egl_display_ == EGL_NO_DISPLAY) {
-Display* dpy = XOpenDisplay(nullptr);
-if (dpy) {
-auto glx_ctx = reinterpret_cast<GLXContext>(ctx_ptr);
-// pbuffer fallback: create a 1x1 GLXPbuffer if surfaceless fails
-int fbAttribs[] = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_DOUBLEBUFFER, False, None};
-int fbCount;
-GLXFBConfig* fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), fbAttribs, &fbCount);
-GLXDrawable drawable = None;
-if (fbc && fbCount > 0) {
-int pbAttribs[] = {GLX_PBUFFER_WIDTH, 1, GLX_PBUFFER_HEIGHT, 1, None};
-drawable = glXCreatePbuffer(dpy, fbc[0], pbAttribs);
-XFree(fbc);
-}
-bool glx_ok = glXMakeCurrent(dpy, drawable, glx_ctx);
-if (glx_ok) {
-using_egl_ = false;
-glx_display_ = dpy;
-glx_drawable_ = drawable;
-} else {
-if (drawable != None) glXDestroyPbuffer(dpy, drawable);
-XCloseDisplay(dpy);
-return false;
-}
-} else {
-return false;
-}
-}
+		EGLContext egl_ctx = reinterpret_cast<EGLContext>(context_ptr);
+		if (!egl_ctx) {
+			LOG("EGL: null EGLContext");
+			return false;
+		}
 
-if (!load_gl_functions()) {
-LOG("Failed to load OpenGL functions");
-if (using_egl_) {
-eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-egl_pbuffer_surface_ = EGL_NO_SURFACE;
-}
-} else {
-glXMakeCurrent(glx_display_, None, nullptr);
-}
-return false;
-}
+		EGLint major, minor;
+		if (!eglInitialize(egl_display_, &major, &minor)) {
+			LOG("EGL: eglInitialize failed (ver=%d.%d)", major, minor);
+			return false;
+		}
 
-mpv_opengl_init_params gl_init_params{
-.get_proc_address = get_proc_address_mpv,
-.get_proc_address_ctx = nullptr
-};
-mpv_render_param params[] = {
-{
-MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)
-},
-{
-MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params
-},
-{
-MPV_RENDER_PARAM_INVALID, nullptr
-},
-};
+		EGLint configAttribs[] = {
+			EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+			EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+			EGL_RED_SIZE, 8,
+			EGL_GREEN_SIZE, 8,
+			EGL_BLUE_SIZE, 8,
+			EGL_ALPHA_SIZE, 8,
+			EGL_NONE
+		};
+		EGLint configCount;
+		EGLConfig egl_config;
+		if (!eglChooseConfig(egl_display_, configAttribs, &egl_config, 1, &configCount) || configCount < 1) {
+			LOG("EGL: no suitable config");
+			return false;
+		}
 
-if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
-render_context_ = nullptr;
-if (using_egl_) {
-eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-egl_pbuffer_surface_ = EGL_NO_SURFACE;
-}
-} else {
-if (glx_display_) {
-GLXDrawable drawable = glXGetCurrentDrawable();
-glXMakeCurrent(glx_display_, None, nullptr);
-if (drawable != None) glXDestroyPbuffer(glx_display_, drawable);
-}
-}
-return false;
-}
+		EGLint pbAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+		egl_pbuffer_surface_ = eglCreatePbufferSurface(egl_display_, egl_config, pbAttribs);
+		if (egl_pbuffer_surface_ == EGL_NO_SURFACE) {
+			LOG("EGL: pbuffer creation failed");
+			return false;
+		}
+
+		if (!eglMakeCurrent(egl_display_, egl_pbuffer_surface_, egl_pbuffer_surface_, egl_ctx)) {
+			LOG("EGL: eglMakeCurrent failed");
+			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+			egl_pbuffer_surface_ = EGL_NO_SURFACE;
+			return false;
+		}
+		LOG("EGL: context made current to pbuffer, display=%p ctx=%p", (void*)egl_display_, (void*)egl_ctx);
+
+		if (!load_gl_functions()) {
+			LOG("EGL: failed to load OpenGL functions");
+			eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+			egl_pbuffer_surface_ = EGL_NO_SURFACE;
+			return false;
+		}
+
+		mpv_opengl_init_params gl_init_params{
+			.get_proc_address = get_proc_address_mpv,
+			.get_proc_address_ctx = nullptr
+		};
+		mpv_render_param params[] = {
+			{MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
+			{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+			{MPV_RENDER_PARAM_INVALID, nullptr},
+		};
+
+		if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
+			render_context_ = nullptr;
+			LOG("EGL: mpv_render_context_create failed");
+			eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+			egl_pbuffer_surface_ = EGL_NO_SURFACE;
+			return false;
+		}
+		LOG("EGL: mpv_render_context_create succeeded");
+
+	} else {
+		// ---- X11 / GLX path ----
+		using_egl_ = false;
+		egl_display_ = EGL_NO_DISPLAY;
+		egl_pbuffer_surface_ = EGL_NO_SURFACE;
+
+		// device_ptr is Skiko's X11 Display* (passed from Kotlin via glDevice).
+		// We MUST use Skiko's display connection because GLX contexts are tied
+		// to the Display* that created them.
+		Display* dpy = reinterpret_cast<Display*>(device_ptr);
+		if (!dpy) {
+			LOG("GLX: no X11 display (device_ptr=0)");
+			return false;
+		}
+
+		glx_display_ = dpy;
+		owns_glx_display_ = false;
+		auto glx_ctx = reinterpret_cast<GLXContext>(context_ptr);
+
+		LOG("GLX: creating pbuffer on Skiko display=%p ctx=%p", (void*)dpy, (void*)glx_ctx);
+		int fbAttribs[] = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_DOUBLEBUFFER, False, None};
+		int fbCount;
+		GLXFBConfig* fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), fbAttribs, &fbCount);
+		if (!fbc || fbCount == 0) {
+			LOG("GLX: no suitable pbuffer config");
+			return false;
+		}
+
+		int pbAttribs[] = {GLX_PBUFFER_WIDTH, 1, GLX_PBUFFER_HEIGHT, 1, None};
+		GLXDrawable drawable = glXCreatePbuffer(dpy, fbc[0], pbAttribs);
+		XFree(fbc);
+
+		if (drawable == None) {
+			LOG("GLX: pbuffer creation failed");
+			return false;
+		}
+
+		glx_drawable_ = drawable;
+		owns_glx_drawable_ = true;
+
+		LOG("GLX: glXMakeCurrent(dpy=%p, drawable=%lu, ctx=%p)", (void*)dpy, (unsigned long)drawable, (void*)glx_ctx);
+		if (!glXMakeCurrent(dpy, drawable, glx_ctx)) {
+			LOG("GLX: glXMakeCurrent failed");
+			glXDestroyPbuffer(dpy, drawable);
+			glx_drawable_ = None;
+			owns_glx_drawable_ = false;
+			return false;
+		}
+		LOG("GLX: glXMakeCurrent succeeded");
+
+		if (!load_gl_functions()) {
+			LOG("Failed to load OpenGL functions");
+			glXMakeCurrent(dpy, None, nullptr);
+			glXDestroyPbuffer(dpy, drawable);
+			glx_drawable_ = None;
+			owns_glx_drawable_ = false;
+			return false;
+		}
+
+		mpv_opengl_init_params gl_init_params{
+			.get_proc_address = get_proc_address_mpv,
+			.get_proc_address_ctx = nullptr
+		};
+		mpv_render_param params[] = {
+			{MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
+			{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+			{MPV_RENDER_PARAM_INVALID, nullptr},
+		};
+
+		if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
+			render_context_ = nullptr;
+			LOG("GLX: mpv_render_context_create failed");
+			glXMakeCurrent(dpy, None, nullptr);
+			glXDestroyPbuffer(dpy, drawable);
+			glx_drawable_ = None;
+			owns_glx_drawable_ = false;
+			return false;
+		}
+		LOG("GLX: mpv_render_context_create succeeded");
+	}
 
 #endif
 
@@ -449,37 +507,37 @@ if (!render_context_)
 return false;
 
 #ifdef _WIN32
-HDC old_dc = wglGetCurrentDC();
-HGLRC old_ctx = wglGetCurrentContext();
-wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
+	HDC old_dc = wglGetCurrentDC();
+	HGLRC old_ctx = wglGetCurrentContext();
+	wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 #elif defined(__linux__)
-if (using_egl_) {
-eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
-} else {
-glXMakeCurrent(glx_display_, glXGetCurrentDrawable(), reinterpret_cast<GLXContext>(context_));
-}
+	if (using_egl_) {
+		eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+	} else {
+		glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+	}
 #endif
 
-mpv_render_context_free(render_context_);
+	mpv_render_context_free(render_context_);
 
 #ifdef _WIN32
-wglMakeCurrent(old_dc, old_ctx);
+	wglMakeCurrent(old_dc, old_ctx);
 #elif defined(__linux__)
-if (using_egl_) {
-if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
-eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-egl_pbuffer_surface_ = EGL_NO_SURFACE;
-}
-eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-} else {
-if (glx_display_) {
-GLXDrawable drawable = glXGetCurrentDrawable();
-glXMakeCurrent(glx_display_, None, nullptr);
-if (drawable != None) glXDestroyPbuffer(glx_display_, drawable);
-XCloseDisplay(glx_display_);
-glx_display_ = nullptr;
-}
-}
+	if (using_egl_) {
+		if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
+			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+			egl_pbuffer_surface_ = EGL_NO_SURFACE;
+		}
+		eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+	} else {
+		if (glx_display_) {
+			glXMakeCurrent(glx_display_, None, nullptr);
+			if (owns_glx_drawable_ && glx_drawable_ != None) glXDestroyPbuffer(glx_display_, glx_drawable_);
+			if (owns_glx_display_) XCloseDisplay(glx_display_);
+			glx_display_ = nullptr;
+			glx_drawable_ = None;
+		}
+	}
 #endif
 
 render_context_ = nullptr;
@@ -500,7 +558,7 @@ return 0;
 }
 #elif defined(__linux__)
 if (using_egl_ ? !eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
-: !glXMakeCurrent(glx_display_, glXGetCurrentDrawable(), reinterpret_cast<GLXContext>(context_))) {
+: !glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_))) {
 LOG("Failed to make context current in create_texture");
 return 0;
 }

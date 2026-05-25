@@ -160,11 +160,9 @@ actual class MpvMediampPlayer(
                 handle.option("vo", "libmpv")
                 handle.option("fbo-format", "rgba8")
                 handle.option("dither-depth", "no")
-                // Some Windows GPU/driver combinations corrupt HEVC Main10
-                // frames when libmpv renders hardware-decoded frames into the
-                // OpenGL FBO used by Compose. Let mpv software-decode HEVC on
-                // Windows while preserving hardware decode for other codecs.
-                hardwareDecoderCodecs = "h264,mpeg4,mpeg2video,vp8,vp9,av1"
+                // Enable all codecs including HEVC - software fallback used
+                // if hardware decoding is not available or causes issues.
+                hardwareDecoderCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1"
             }
 
             is Platform.MacOS -> {
@@ -175,9 +173,10 @@ actual class MpvMediampPlayer(
             }
 
             is Platform.Linux -> {
-                handle.option("ao", "pulseaudio,alsa")
+                val isWayland = System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
+                handle.option("ao", if (isWayland) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
                 handle.option("vo", "libmpv")
-                handle.option("gpu-context", "x11egl")
+                handle.option("gpu-context", if (isWayland) "wayland" else "x11egl")
             }
 
             else -> {}

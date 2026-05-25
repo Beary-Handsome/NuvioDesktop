@@ -348,10 +348,6 @@ object PlayerSettingsRepository {
                 ?: ExternalPlayerPlatform.availablePlayers().firstOrNull()?.id
             PlayerSettingsStorage.saveExternalPlayerId(externalPlayerId)
         }
-        if (externalPlayerEnabled == enabled) {
-            publish()
-            return
-        }
         externalPlayerEnabled = enabled
         publish()
         PlayerSettingsStorage.saveExternalPlayerEnabled(enabled)

@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.graphics.Color
@@ -29,6 +30,7 @@ import com.nuvio.app.core.sync.encodeSyncString
 import com.nuvio.app.core.sync.encodeSyncStringSet
 import com.nuvio.app.desktop.DesktopBorderlessFullscreenController
 import com.nuvio.app.desktop.DesktopPreferences
+import com.nuvio.app.desktop.DesktopRuntimeLog
 import com.nuvio.app.features.player.desktop.DesktopPlayerSurfaceHost
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.streams.AddonStreamGroup
@@ -69,6 +71,7 @@ actual fun PlatformPlayerSurface(
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
 ) {
+    ManageDesktopPlayerFrameTrace()
     if (isMacOS) {
         MacOSPlayerSurface(
             sourceUrl = sourceUrl,
@@ -551,10 +554,16 @@ internal actual object PlayerSettingsStorage {
         resizeModeKey,
         holdToSpeedEnabledKey,
         holdToSpeedValueKey,
+        externalPlayerEnabledKey,
+        externalPlayerIdKey,
         preferredAudioLanguageKey,
         secondaryPreferredAudioLanguageKey,
         preferredSubtitleLanguageKey,
         secondaryPreferredSubtitleLanguageKey,
+        subtitleTextColorKey,
+        subtitleOutlineEnabledKey,
+        subtitleFontSizeSpKey,
+        subtitleBottomOffsetKey,
         streamReuseLastLinkEnabledKey,
         streamReuseLastLinkCacheHoursKey,
         decoderPriorityKey,
@@ -579,6 +588,20 @@ internal actual object PlayerSettingsStorage {
         nextEpisodeThresholdMinutesBeforeEndKey,
         useLibassKey,
         libassRenderTypeKey,
+        iosVideoOutputPresetKey,
+        iosToneMappingModeKey,
+        iosTargetPrimariesKey,
+        iosTargetTransferKey,
+        iosHardwareDecoderModeKey,
+        iosExtendedDynamicRangeEnabledKey,
+        iosTargetColorspaceHintEnabledKey,
+        iosHdrComputePeakEnabledKey,
+        iosDebandEnabledKey,
+        iosInterpolationEnabledKey,
+        iosBrightnessKey,
+        iosContrastKey,
+        iosSaturationKey,
+        iosGammaKey,
     )
 
     actual fun loadShowLoadingOverlay(): Boolean? = loadBoolean(showLoadingOverlayKey)
@@ -809,35 +832,49 @@ internal actual object PlayerSettingsStorage {
         saveString(libassRenderTypeKey, renderType)
     }
 
-    // iOS-specific stubs (no-op on desktop)
-    actual fun loadIosVideoOutputPreset(): String? = null
-    actual fun saveIosVideoOutputPreset(preset: String) {}
-    actual fun loadIosToneMappingMode(): String? = null
-    actual fun saveIosToneMappingMode(mode: String) {}
-    actual fun loadIosTargetPrimaries(): String? = null
-    actual fun saveIosTargetPrimaries(primaries: String) {}
-    actual fun loadIosTargetTransfer(): String? = null
-    actual fun saveIosTargetTransfer(transfer: String) {}
-    actual fun loadIosHardwareDecoderMode(): String? = null
-    actual fun saveIosHardwareDecoderMode(mode: String) {}
-    actual fun loadIosExtendedDynamicRangeEnabled(): Boolean? = null
-    actual fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean) {}
-    actual fun loadIosTargetColorspaceHintEnabled(): Boolean? = null
-    actual fun saveIosTargetColorspaceHintEnabled(enabled: Boolean) {}
-    actual fun loadIosHdrComputePeakEnabled(): Boolean? = null
-    actual fun saveIosHdrComputePeakEnabled(enabled: Boolean) {}
-    actual fun loadIosDebandEnabled(): Boolean? = null
-    actual fun saveIosDebandEnabled(enabled: Boolean) {}
-    actual fun loadIosInterpolationEnabled(): Boolean? = null
-    actual fun saveIosInterpolationEnabled(enabled: Boolean) {}
-    actual fun loadIosBrightness(): Int? = null
-    actual fun saveIosBrightness(value: Int) {}
-    actual fun loadIosContrast(): Int? = null
-    actual fun saveIosContrast(value: Int) {}
-    actual fun loadIosSaturation(): Int? = null
-    actual fun saveIosSaturation(value: Int) {}
-    actual fun loadIosGamma(): Int? = null
-    actual fun saveIosGamma(value: Int) {}
+    // iOS video output settings (desktop uses these keys for sync with mobile)
+    private const val iosVideoOutputPresetKey = "ios_video_output_preset"
+    private const val iosToneMappingModeKey = "ios_tone_mapping_mode"
+    private const val iosTargetPrimariesKey = "ios_target_primaries"
+    private const val iosTargetTransferKey = "ios_target_transfer"
+    private const val iosHardwareDecoderModeKey = "ios_hardware_decoder_mode"
+    private const val iosExtendedDynamicRangeEnabledKey = "ios_extended_dynamic_range_enabled"
+    private const val iosTargetColorspaceHintEnabledKey = "ios_target_colorspace_hint_enabled"
+    private const val iosHdrComputePeakEnabledKey = "ios_hdr_compute_peak_enabled"
+    private const val iosDebandEnabledKey = "ios_deband_enabled"
+    private const val iosInterpolationEnabledKey = "ios_interpolation_enabled"
+    private const val iosBrightnessKey = "ios_brightness"
+    private const val iosContrastKey = "ios_contrast"
+    private const val iosSaturationKey = "ios_saturation"
+    private const val iosGammaKey = "ios_gamma"
+    actual fun loadIosVideoOutputPreset(): String? = loadString(iosVideoOutputPresetKey)
+    actual fun saveIosVideoOutputPreset(preset: String) { saveString(iosVideoOutputPresetKey, preset) }
+    actual fun loadIosToneMappingMode(): String? = loadString(iosToneMappingModeKey)
+    actual fun saveIosToneMappingMode(mode: String) { saveString(iosToneMappingModeKey, mode) }
+    actual fun loadIosTargetPrimaries(): String? = loadString(iosTargetPrimariesKey)
+    actual fun saveIosTargetPrimaries(primaries: String) { saveString(iosTargetPrimariesKey, primaries) }
+    actual fun loadIosTargetTransfer(): String? = loadString(iosTargetTransferKey)
+    actual fun saveIosTargetTransfer(transfer: String) { saveString(iosTargetTransferKey, transfer) }
+    actual fun loadIosHardwareDecoderMode(): String? = loadString(iosHardwareDecoderModeKey)
+    actual fun saveIosHardwareDecoderMode(mode: String) { saveString(iosHardwareDecoderModeKey, mode) }
+    actual fun loadIosExtendedDynamicRangeEnabled(): Boolean? = loadBoolean(iosExtendedDynamicRangeEnabledKey)
+    actual fun saveIosExtendedDynamicRangeEnabled(enabled: Boolean) { saveBoolean(iosExtendedDynamicRangeEnabledKey, enabled) }
+    actual fun loadIosTargetColorspaceHintEnabled(): Boolean? = loadBoolean(iosTargetColorspaceHintEnabledKey)
+    actual fun saveIosTargetColorspaceHintEnabled(enabled: Boolean) { saveBoolean(iosTargetColorspaceHintEnabledKey, enabled) }
+    actual fun loadIosHdrComputePeakEnabled(): Boolean? = loadBoolean(iosHdrComputePeakEnabledKey)
+    actual fun saveIosHdrComputePeakEnabled(enabled: Boolean) { saveBoolean(iosHdrComputePeakEnabledKey, enabled) }
+    actual fun loadIosDebandEnabled(): Boolean? = loadBoolean(iosDebandEnabledKey)
+    actual fun saveIosDebandEnabled(enabled: Boolean) { saveBoolean(iosDebandEnabledKey, enabled) }
+    actual fun loadIosInterpolationEnabled(): Boolean? = loadBoolean(iosInterpolationEnabledKey)
+    actual fun saveIosInterpolationEnabled(enabled: Boolean) { saveBoolean(iosInterpolationEnabledKey, enabled) }
+    actual fun loadIosBrightness(): Int? = loadInt(iosBrightnessKey)
+    actual fun saveIosBrightness(value: Int) { saveInt(iosBrightnessKey, value) }
+    actual fun loadIosContrast(): Int? = loadInt(iosContrastKey)
+    actual fun saveIosContrast(value: Int) { saveInt(iosContrastKey, value) }
+    actual fun loadIosSaturation(): Int? = loadInt(iosSaturationKey)
+    actual fun saveIosSaturation(value: Int) { saveInt(iosSaturationKey, value) }
+    actual fun loadIosGamma(): Int? = loadInt(iosGammaKey)
+    actual fun saveIosGamma(value: Int) { saveInt(iosGammaKey, value) }
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
@@ -872,8 +909,26 @@ internal actual object PlayerSettingsStorage {
         loadNextEpisodeThresholdMode()?.let { put(nextEpisodeThresholdModeKey, encodeSyncString(it)) }
         loadNextEpisodeThresholdPercent()?.let { put(nextEpisodeThresholdPercentKey, encodeSyncFloat(it)) }
         loadNextEpisodeThresholdMinutesBeforeEnd()?.let { put(nextEpisodeThresholdMinutesBeforeEndKey, encodeSyncFloat(it)) }
+        loadSubtitleTextColor()?.let { put(subtitleTextColorKey, encodeSyncString(it)) }
+        loadSubtitleOutlineEnabled()?.let { put(subtitleOutlineEnabledKey, encodeSyncBoolean(it)) }
+        loadSubtitleFontSizeSp()?.let { put(subtitleFontSizeSpKey, encodeSyncInt(it)) }
+        loadSubtitleBottomOffset()?.let { put(subtitleBottomOffsetKey, encodeSyncInt(it)) }
         loadUseLibass()?.let { put(useLibassKey, encodeSyncBoolean(it)) }
         loadLibassRenderType()?.let { put(libassRenderTypeKey, encodeSyncString(it)) }
+        loadIosVideoOutputPreset()?.let { put(iosVideoOutputPresetKey, encodeSyncString(it)) }
+        loadIosToneMappingMode()?.let { put(iosToneMappingModeKey, encodeSyncString(it)) }
+        loadIosTargetPrimaries()?.let { put(iosTargetPrimariesKey, encodeSyncString(it)) }
+        loadIosTargetTransfer()?.let { put(iosTargetTransferKey, encodeSyncString(it)) }
+        loadIosHardwareDecoderMode()?.let { put(iosHardwareDecoderModeKey, encodeSyncString(it)) }
+        loadIosExtendedDynamicRangeEnabled()?.let { put(iosExtendedDynamicRangeEnabledKey, encodeSyncBoolean(it)) }
+        loadIosTargetColorspaceHintEnabled()?.let { put(iosTargetColorspaceHintEnabledKey, encodeSyncBoolean(it)) }
+        loadIosHdrComputePeakEnabled()?.let { put(iosHdrComputePeakEnabledKey, encodeSyncBoolean(it)) }
+        loadIosDebandEnabled()?.let { put(iosDebandEnabledKey, encodeSyncBoolean(it)) }
+        loadIosInterpolationEnabled()?.let { put(iosInterpolationEnabledKey, encodeSyncBoolean(it)) }
+        loadIosBrightness()?.let { put(iosBrightnessKey, encodeSyncInt(it)) }
+        loadIosContrast()?.let { put(iosContrastKey, encodeSyncInt(it)) }
+        loadIosSaturation()?.let { put(iosSaturationKey, encodeSyncInt(it)) }
+        loadIosGamma()?.let { put(iosGammaKey, encodeSyncInt(it)) }
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
@@ -911,8 +966,26 @@ internal actual object PlayerSettingsStorage {
         payload.decodeSyncString(nextEpisodeThresholdModeKey)?.let(::saveNextEpisodeThresholdMode)
         payload.decodeSyncFloat(nextEpisodeThresholdPercentKey)?.let(::saveNextEpisodeThresholdPercent)
         payload.decodeSyncFloat(nextEpisodeThresholdMinutesBeforeEndKey)?.let(::saveNextEpisodeThresholdMinutesBeforeEnd)
+        payload.decodeSyncString(subtitleTextColorKey)?.let(::saveSubtitleTextColor)
+        payload.decodeSyncBoolean(subtitleOutlineEnabledKey)?.let(::saveSubtitleOutlineEnabled)
+        payload.decodeSyncInt(subtitleFontSizeSpKey)?.let(::saveSubtitleFontSizeSp)
+        payload.decodeSyncInt(subtitleBottomOffsetKey)?.let(::saveSubtitleBottomOffset)
         payload.decodeSyncBoolean(useLibassKey)?.let(::saveUseLibass)
         payload.decodeSyncString(libassRenderTypeKey)?.let(::saveLibassRenderType)
+        payload.decodeSyncString(iosVideoOutputPresetKey)?.let(::saveIosVideoOutputPreset)
+        payload.decodeSyncString(iosToneMappingModeKey)?.let(::saveIosToneMappingMode)
+        payload.decodeSyncString(iosTargetPrimariesKey)?.let(::saveIosTargetPrimaries)
+        payload.decodeSyncString(iosTargetTransferKey)?.let(::saveIosTargetTransfer)
+        payload.decodeSyncString(iosHardwareDecoderModeKey)?.let(::saveIosHardwareDecoderMode)
+        payload.decodeSyncBoolean(iosExtendedDynamicRangeEnabledKey)?.let(::saveIosExtendedDynamicRangeEnabled)
+        payload.decodeSyncBoolean(iosTargetColorspaceHintEnabledKey)?.let(::saveIosTargetColorspaceHintEnabled)
+        payload.decodeSyncBoolean(iosHdrComputePeakEnabledKey)?.let(::saveIosHdrComputePeakEnabled)
+        payload.decodeSyncBoolean(iosDebandEnabledKey)?.let(::saveIosDebandEnabled)
+        payload.decodeSyncBoolean(iosInterpolationEnabledKey)?.let(::saveIosInterpolationEnabled)
+        payload.decodeSyncInt(iosBrightnessKey)?.let(::saveIosBrightness)
+        payload.decodeSyncInt(iosContrastKey)?.let(::saveIosContrast)
+        payload.decodeSyncInt(iosSaturationKey)?.let(::saveIosSaturation)
+        payload.decodeSyncInt(iosGammaKey)?.let(::saveIosGamma)
     }
 
     private fun scopedKey(baseKey: String): String = ProfileScopedKey.of(baseKey)
@@ -1139,6 +1212,50 @@ private fun createHiddenPlayerCursor(): Cursor {
     val image = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)
     return Toolkit.getDefaultToolkit().createCustomCursor(image, Point(0, 0), "nuvio-player-hidden-cursor")
 }
+
+@Composable
+private fun ManageDesktopPlayerFrameTrace() {
+    LaunchedEffect(Unit) {
+        var lastFrameNanos = 0L
+        var lastLogNanos = 0L
+        var frameCount = 0
+        var totalMs = 0.0
+        var maxMs = 0.0
+        while (true) {
+            if (!DesktopRuntimeLog.debugEnabled) {
+                lastFrameNanos = 0L
+                lastLogNanos = 0L
+                frameCount = 0
+                totalMs = 0.0
+                maxMs = 0.0
+                delay(1_000)
+                continue
+            }
+            val frameNanos = withFrameNanos { it }
+            if (lastFrameNanos != 0L) {
+                val deltaMs = (frameNanos - lastFrameNanos) / 1_000_000.0
+                frameCount += 1
+                totalMs += deltaMs
+                if (deltaMs > maxMs) maxMs = deltaMs
+            }
+            if (lastLogNanos == 0L) {
+                lastLogNanos = frameNanos
+            } else if (frameNanos - lastLogNanos >= 2_000_000_000L && frameCount > 0) {
+                DesktopRuntimeLog.info(
+                    "PlayerFramePacing composeFrames=$frameCount " +
+                        "avgMs=${(totalMs / frameCount).formatOneDecimal()} maxMs=${maxMs.formatOneDecimal()}",
+                )
+                lastLogNanos = frameNanos
+                frameCount = 0
+                totalMs = 0.0
+                maxMs = 0.0
+            }
+            lastFrameNanos = frameNanos
+        }
+    }
+}
+
+private fun Double.formatOneDecimal(): String = String.format(Locale.US, "%.1f", this)
 
 actual val usesNativePlayerChrome: Boolean
     get() = isMacOS

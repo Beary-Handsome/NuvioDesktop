@@ -246,8 +246,10 @@ object StreamsRepository {
                 pluginProviderGroups.sumOf { it.scrapers.size }
 
             val installedAddonNames = installedAddonOrder.toSet()
-            val installedAddonIds = streamAddons.map { it.addonId }.toSet()
+            val pluginGroupIds = pluginProviderGroups.map { it.addonId }.toSet()
+            val installedAddonIds = streamAddons.map { it.addonId }.toSet() + pluginGroupIds
             val debridAvailabilityJobs = mutableListOf<Job>()
+            val pluginDebridLaunched = mutableSetOf<String>()
             var autoSelectTriggered = false
             var timeoutElapsed = false
             fun publishCompletion(completion: StreamLoadCompletion) {
@@ -524,6 +526,11 @@ object StreamsRepository {
                                 isAnyLoading = anyLoading,
                                 emptyStateReason = updated.toEmptyStateReason(anyLoading),
                             )
+                        }
+                        if (completion.streams.isNotEmpty() && completion.addonId !in pluginDebridLaunched) {
+                            pluginDebridLaunched += completion.addonId
+                            val group = _uiState.value.groups.firstOrNull { it.addonId == completion.addonId }
+                            if (group != null) launchDebridAvailability(group)
                         }
                     }
 

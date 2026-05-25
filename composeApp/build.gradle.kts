@@ -414,6 +414,7 @@ kotlin {
             kotlin.srcDir(generatedRuntimeConfigDir)
         }
         val desktopMain by getting {
+            kotlin.srcDir(fullCommonSourceDir)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.ktor.client.java)
@@ -422,6 +423,8 @@ kotlin {
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation("org.openani.mediamp:mediamp-api:0.1.0-dev-1")
                 implementation("org.openani.mediamp:mediamp-mpv:0.1.0-dev-1")
+                implementation(libs.quickjs.kt)
+                implementation(libs.ksoup)
             }
         }
         if (System.getenv("ANDROID_HOME") != null) {
@@ -711,6 +714,78 @@ val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime"
     }
 }
 
+val packageReleaseAppImage = tasks.register("packageReleaseAppImage") {
+    group = "compose desktop"
+    description = "Builds a Linux AppImage from the release distribution using appimagetool."
+    dependsOn("createReleaseDistributable")
+    dependsOn(packageLinuxNativeRuntime)
+
+    onlyIf { System.getProperty("os.name").lowercase().contains("nux") }
+
+    val distDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio")
+    val appDirRoot = layout.buildDirectory.dir("compose/binaries/main-release/appimage/AppDir")
+    val outputDir = layout.buildDirectory.dir("compose/binaries/main-release/appimage")
+
+    doLast {
+        val appDir = appDirRoot.get().asFile
+        val appDirUsr = appDir.resolve("usr/lib/nuvio")
+        appDir.deleteRecursively()
+        appDir.mkdirs()
+
+        distDir.get().asFile.copyRecursively(appDirUsr, overwrite = true)
+
+        val D = '$'
+
+        val appRun = appDir.resolve("AppRun")
+        appRun.writeText("""#!/bin/bash
+HERE="$(cd "$(dirname "$0")" && pwd)"
+exec "${D}HERE/usr/lib/nuvio/bin/Nuvio" "${D}@"
+""")
+        appRun.setExecutable(true)
+
+        val desktopFile = appDir.resolve("nuvio.desktop")
+        desktopFile.writeText("""[Desktop Entry]
+Name=Nuvio
+Comment=Anime streaming desktop app
+Exec=nuvio
+Icon=nuvio
+Type=Application
+Categories=AudioVideo;Player;
+Terminal=false
+StartupNotify=true
+""")
+
+        val iconFile = project.file("desktop-icons/nuvio_window_icon.png").takeIf { it.exists() }
+            ?: logger.warn("Icon file not found at desktop-icons/nuvio_window_icon.png; AppImage will lack an icon")
+        if (iconFile != null) {
+            iconFile.copyTo(appDir.resolve("nuvio.png"), overwrite = true)
+        }
+
+        val outputFile = outputDir.get().asFile.resolve("Nuvio-${releaseAppVersionName}-x86_64.AppImage")
+        outputFile.parentFile.mkdirs()
+
+        logger.lifecycle("Running appimagetool on ${appDir.path} -> ${outputFile.path}")
+        val process = ProcessBuilder(
+            "appimagetool",
+            "--no-appstream",
+            appDir.absolutePath,
+            outputFile.absolutePath,
+        ).inheritIO().start()
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw GradleException("appimagetool failed with exit code $exitCode — ensure appimagetool is on PATH")
+        }
+        logger.lifecycle("AppImage created: ${outputFile.path}")
+    }
+}
+
+tasks.matching {
+    it.name == "packageReleaseAppImage"
+}.configureEach {
+    dependsOn("createReleaseDistributable")
+    dependsOn(packageLinuxNativeRuntime)
+}
+
 val windowsPackageResourcesSource = layout.projectDirectory.dir("src/windowsPackageResources").asFile
 val composeWindowsResourceDir = layout.buildDirectory.dir("compose/tmp/resources")
 val windowsInstallerSidebarPngFile = layout.projectDirectory.file("desktop-icons/nuvio-installer-sidebar.png").asFile
@@ -749,6 +824,10 @@ tasks.matching {
 }.configureEach {
     dependsOn("createReleaseDistributable")
     dependsOn(packageLinuxNativeRuntime)
+}
+
+tasks.matching { it.name == "run" }.configureEach {
+    if (this is JavaExec) environment("LC_NUMERIC", "C")
 }
 
 tasks.matching { it.name == "runReleaseDistributable" }.configureEach {

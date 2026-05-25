@@ -81,6 +81,7 @@ import com.nuvio.app.features.watchprogress.WatchProgressClock
 import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -1983,7 +1984,8 @@ fun PlayerScreen(
                         }
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(showSubtitleModal, showAudioModal, showVideoSettingsModal, showSourcesPanel, showEpisodesPanel) {
+                    if (showSubtitleModal || showAudioModal || showVideoSettingsModal || showSourcesPanel || showEpisodesPanel) return@pointerInput
                     awaitEachGesture {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -2263,14 +2265,14 @@ fun PlayerScreen(
                         refreshTracks()
                         showAudioModal = true
                     },
-                    onVideoSettingsClick = if (isIos) {
+                    onVideoSettingsClick = if (isIos || isDesktop) {
                         {
                             showVideoSettingsModal = true
-                            controlsVisible = true
                         }
                     } else {
                         null
                     },
+
                     onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
                     onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
                     onSubmitIntroClick = if (isSeries && playerSettingsUiState.introSubmitEnabled && playerSettingsUiState.introDbApiKey.isNotBlank()) { { showSubmitIntroModal = true } } else null,
@@ -2439,7 +2441,7 @@ fun PlayerScreen(
                 onDismiss = { showSubtitleModal = false },
             )
 
-            IosVideoSettingsModal(
+            VideoSettingsModal(
                 visible = showVideoSettingsModal,
                 settings = playerSettingsUiState,
                 onSettingsChanged = {

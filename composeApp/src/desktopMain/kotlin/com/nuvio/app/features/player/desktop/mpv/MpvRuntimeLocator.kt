@@ -1,6 +1,9 @@
 package com.nuvio.app.features.player.desktop.mpv
 
+import com.nuvio.app.desktop.DesktopRuntimeLog
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 internal fun runtimeLibraryName(): String =
     if (isOsWindows()) "mediampv.dll" else "libmediampv.so"
@@ -77,17 +80,131 @@ internal object MpvRuntimeLocator {
             }
         }
 
+        val packagedRuntime = if (isOsWindows()) {
+            appDir?.resolve("native")
+                ?.takeIf { it.resolve(runtimeLibraryName()).isFile && it.resolve("libmpv-2.dll").isFile }
+        } else {
+            null
+        }
+        val stremioHybrid = if (packagedRuntime == null && isOsWindows()) {
+            resolveStremioHybridRuntime(candidates.values)
+        } else {
+            null
+        }
+        stremioHybrid?.let { add("stremio:hybrid-runtime", it) }
+
         val libName = runtimeLibraryName()
         val checked = candidates.map { (label, dir) ->
             "$label=${dir.safePath()} exists=${dir.isDirectory} $libName=${dir.resolve(libName).isFile}"
         }
-        val selected = candidates.values.firstOrNull { it.resolve(libName).isFile }
+        val selected = packagedRuntime
+            ?: stremioHybrid?.takeIf { it.resolve(libName).isFile }
+            ?: candidates.values.firstOrNull { it.resolve(libName).isFile }
         return MpvRuntimeResolution(
             directory = selected,
             checkedDirectories = checked,
             diagnostics = "selected=${selected?.safePath() ?: "none"} checked=${checked.joinToString(" | ")}",
         )
     }
+
+    private fun resolveStremioHybridRuntime(baseCandidates: Collection<File>): File? {
+        val stremioDir = stremioLibmpvDir() ?: return null
+        val stremioLibmpv = resolveOrExtractStremioLibmpv(stremioDir) ?: run {
+            DesktopRuntimeLog.warn("stremioHybrid: libmpv-2.dll missing dir=${stremioDir.safePath()}")
+            return null
+        }
+        val baseRuntime = baseCandidates.firstOrNull { it.resolve(runtimeLibraryName()).isFile } ?: return null
+        val hybridDir = localAppDataDir()
+            ?.resolve("Nuvio")
+            ?.resolve("cache")
+            ?.resolve("mpv-stremio-hybrid")
+            ?: return null
+
+        return runCatching {
+            Files.createDirectories(hybridDir.toPath())
+            baseRuntime.listFiles { file -> file.isFile && file.extension.equals("dll", ignoreCase = true) }
+                .orEmpty()
+                .forEach { source ->
+                    val target = hybridDir.resolve(source.name)
+                    if (!target.isFile || target.length() != source.length()) {
+                        Files.copy(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            Files.copy(
+                stremioLibmpv.toPath(),
+                hybridDir.resolve("libmpv-2.dll").toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+            DesktopRuntimeLog.info(
+                "stremioHybrid: prepared runtime dir=${hybridDir.safePath()} " +
+                    "base=${baseRuntime.safePath()} libmpvSize=${stremioLibmpv.length()}",
+            )
+            hybridDir
+        }.onFailure {
+            DesktopRuntimeLog.warn("stremioHybrid: prepare failed message=${it.message}")
+        }.getOrNull()
+    }
+
+    private fun resolveOrExtractStremioLibmpv(stremioDir: File): File? {
+        val direct = stremioDir.resolve("libmpv-2.dll")
+        if (direct.isFile) return direct
+
+        val rarFile = stremioDir.resolve("libmpv-2.dll.rar")
+        if (!rarFile.isFile) return null
+
+        val sevenZip = System.getenv("NUVIO_7Z")?.takeIf { it.isNotBlank() } ?: "7z"
+        val outputDir = localAppDataDir()
+            ?.resolve("Nuvio")
+            ?.resolve("cache")
+            ?.resolve("mpv-stremio-extract")
+            ?: return null
+
+        return runCatching {
+            Files.createDirectories(outputDir.toPath())
+            val extracted = outputDir.resolve("libmpv-2.dll")
+            if (extracted.isFile && extracted.length() > 0L) return extracted
+
+            DesktopRuntimeLog.info("stremioHybrid: extracting libmpv-2.dll via 7z rar=${rarFile.safePath()}")
+            val process = ProcessBuilder(
+                sevenZip,
+                "x",
+                "-y",
+                "-o${outputDir.absolutePath}",
+                rarFile.absolutePath,
+            )
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                DesktopRuntimeLog.warn("stremioHybrid: 7z extract failed exit=$exitCode output=${output.take(500)}")
+                return null
+            }
+            extracted.takeIf { it.isFile }
+        }.onFailure {
+            DesktopRuntimeLog.warn("stremioHybrid: 7z extract threw message=${it.message}")
+        }.getOrNull()
+    }
+
+    private fun stremioLibmpvDir(): File? {
+        val configured = System.getProperty("nuvio.stremio.libmpv.dir")
+            ?: System.getenv("NUVIO_STREMIO_LIBMPV_DIR")
+        configured?.toFileOrNull()?.let { return it }
+
+        System.getProperty("user.dir")
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.resolve("stremio-community-v5/deps/libmpv/x86_64")
+            ?.takeIf { it.isDirectory }
+            ?.let { return it }
+
+        return null
+    }
+
+    private fun localAppDataDir(): File? =
+        System.getenv("LOCALAPPDATA")
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
 
     private fun devLookupEnabled(): Boolean =
         System.getenv("NUVIO_DEV_PLAYER_LOOKUP").equals("true", ignoreCase = true) ||
@@ -112,4 +229,4 @@ internal object MpvRuntimeLocator {
         takeIf { it.isNotBlank() }?.let(::File)
 }
 
-internal fun File.safePath(): String = absolutePath.replace("\\", "/")
+internal fun File.safePath(): String = DesktopRuntimeLog.safePath(this)

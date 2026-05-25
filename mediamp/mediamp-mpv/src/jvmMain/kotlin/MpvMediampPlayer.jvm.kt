@@ -175,9 +175,10 @@ actual class MpvMediampPlayer(
             }
 
             is Platform.Linux -> {
-                handle.option("ao", "pulseaudio,alsa")
+                val isWayland = System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
+                handle.option("ao", if (isWayland) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
                 handle.option("vo", "libmpv")
-                handle.option("gpu-context", "x11egl")
+                handle.option("gpu-context", if (isWayland) "wayland" else "x11egl")
             }
 
             else -> {}

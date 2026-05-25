@@ -9,21 +9,24 @@ import com.nuvio.app.features.player.AudioTrack
 import com.nuvio.app.features.player.PlayerAudioLevel
 import com.nuvio.app.features.player.PlayerEngineController
 import com.nuvio.app.features.player.PlayerResizeMode
+import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
 import com.nuvio.app.features.player.desktop.DesktopPlayerBackend
 import com.nuvio.app.features.player.desktop.DesktopPlayerError
 import com.nuvio.app.features.player.desktop.DesktopPlayerPhase
-import com.nuvio.app.features.player.desktop.WindowsDisplayWakeLock
 import com.nuvio.app.features.player.desktop.DesktopPlayerRequest
 import com.nuvio.app.features.player.desktop.DesktopPlayerState
+import com.nuvio.app.features.player.desktop.WindowsDisplayWakeLock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -62,6 +65,7 @@ internal class MpvDesktopPlayerBackend private constructor(
 ) : DesktopPlayerBackend {
     override val id: String = "windows-mpv-${System.identityHashCode(player)}"
     override val backendName: String = "windows-mediamp-mpv"
+    private val mpvHandle: MPVHandle get() = player.impl as MPVHandle
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val stateFlow = MutableStateFlow(
@@ -75,9 +79,12 @@ internal class MpvDesktopPlayerBackend private constructor(
     @Volatile private var stopped = false
     @Volatile private var nativeClosed = false
     @Volatile private var currentRequest: DesktopPlayerRequest? = null
+    @Volatile private var lastKnownPositionMs: Long = 0L
+    @Volatile private var pendingSeekMs: Long = 0L
     @Volatile private var externalSubtitleActive = false
     @Volatile private var displayWakeLockHeld = false
     @Volatile private var latestSubtitleStyle = SubtitleStyleState.DEFAULT
+    private val framePacingSamples = ArrayDeque<String>()
     private val externalSubtitleRequestCounter = AtomicInteger(0)
     private val externalSubtitleTempFiles = mutableSetOf<Path>()
     private val subtitleHttpClient = HttpClient.newBuilder()
@@ -90,6 +97,10 @@ internal class MpvDesktopPlayerBackend private constructor(
 
     init {
         observePlayerState()
+        observeFramePacing()
+        observePlaybackSettings()
+        applyDecoderSettings()
+        applyCursorSettings()
         DesktopRuntimeLog.info("MPV backend created id=$id runtime=${runtime.directory?.safePath() ?: "none"}")
     }
 
@@ -98,6 +109,9 @@ internal class MpvDesktopPlayerBackend private constructor(
         if (request.sourceUrl.isBlank()) {
             fail(DesktopPlayerError.InvalidSource(backendName, "Blank source URL"))
             return
+        }
+        if (currentRequest != null) {
+            emitFramePacingSummary("load")
         }
         currentRequest = request
         stopped = false
@@ -110,14 +124,20 @@ internal class MpvDesktopPlayerBackend private constructor(
             )
             resetExternalSubtitleState("load")
             player.setMediaData(UriMediaData(request.sourceUrl, headers))
+            if (request.seekTargetMs > 0L) {
+                pendingSeekMs = request.seekTargetMs
+                DesktopRuntimeLog.info("MPV deferred seek target=${request.seekTargetMs}ms")
+            } else {
+                pendingSeekMs = 0L
+            }
             request.sourceAudioUrl?.takeIf { it.isNotBlank() }?.let { audioUrl ->
-                runCatching { player.impl.command("audio-add", audioUrl, "auto") }
+                runCatching { mpvHandle.command("audio-add", audioUrl, "auto") }
                     .onFailure { DesktopRuntimeLog.error("MPV audio-add failed audio=${audioUrl.redactedMediaUrl()}", it) }
             }
             setResizeMode(request.resizeMode)
             if (request.playWhenReady) {
                 player.resume()
-                runCatching { player.impl.setPropertyBoolean("pause", false) }
+                runCatching { mpvHandle.setPropertyBoolean("pause", false) }
                     .onFailure { DesktopRuntimeLog.error("MPV unpause after load failed", it) }
             } else {
                 player.pause()
@@ -132,7 +152,7 @@ internal class MpvDesktopPlayerBackend private constructor(
 
     override fun setResizeMode(resizeMode: PlayerResizeMode) {
         if (!canReceiveCommands()) return
-        runCatching { player.impl.applyResizeMode(resizeMode) }
+        runCatching { mpvHandle.applyResizeMode(resizeMode) }
             .onSuccess { DesktopRuntimeLog.info("MPV resizeMode=$resizeMode applied") }
             .onFailure { DesktopRuntimeLog.error("MPV resizeMode=$resizeMode failed", it) }
     }
@@ -141,16 +161,18 @@ internal class MpvDesktopPlayerBackend private constructor(
         if (stopped) return
         stopped = true
         DesktopRuntimeLog.info("MPV releaseSoft id=$id")
+        emitFramePacingSummary("releaseSoft")
         releaseDisplayWakeLock("releaseSoft")
         resetExternalSubtitleState("releaseSoft")
-        runCatching { player.impl.setPropertyBoolean("mute", true) }
-        runCatching { player.impl.command("stop") }
+        runCatching { mpvHandle.setPropertyBoolean("mute", true) }
+        runCatching { mpvHandle.command("stop") }
             .onFailure { DesktopRuntimeLog.error("MPV stop failed id=$id", it) }
         stateFlow.value = stateFlow.value.copy(phase = DesktopPlayerPhase.Closed)
     }
 
     override fun close() {
         if (nativeClosed) return
+        emitFramePacingSummary("close")
         releaseDisplayWakeLock("close")
         resetExternalSubtitleState("close")
         nativeClosed = true
@@ -195,21 +217,84 @@ internal class MpvDesktopPlayerBackend private constructor(
                 },
             )
         }.onEach { mapped ->
+            if (mapped.phase == DesktopPlayerPhase.Playing && mapped.positionMs > 0L) {
+                lastKnownPositionMs = mapped.positionMs
+            }
+            if (pendingSeekMs > 0L && mapped.durationMs > 0L) {
+                val seekMs = pendingSeekMs
+                pendingSeekMs = 0L
+                val seekSec = seekMs / 1000.0
+                val ok = runCatching { mpvHandle.command("seek", seekSec.toString(), "absolute") }
+                    .getOrNull() == true
+                if (ok) {
+                    player.currentPositionMillis.value = seekMs
+                }
+                DesktopRuntimeLog.info("MPV seek after load executed target=${seekMs}ms ok=$ok duration=${mapped.durationMs}")
+            }
             if (!nativeClosed) {
                 updateDisplayWakeLock(mapped.phase)
-                DesktopRuntimeLog.info("[WP-STATE] phase=${mapped.phase} pos=${mapped.positionMs}ms dur=${mapped.durationMs}ms")
                 stateFlow.value = mapped
+                DesktopRuntimeLog.info("[WP-STATE] phase=${mapped.phase} pos=${mapped.positionMs}ms dur=${mapped.durationMs}ms")
             }
         }.launchIn(scope)
     }
 
-    private fun fail(error: DesktopPlayerError) {
-        releaseDisplayWakeLock("fail-${error::class.simpleName}")
-        stateFlow.value = stateFlow.value.copy(
-            phase = DesktopPlayerPhase.Error,
-            error = error,
-            diagnostics = error.technicalMessage,
+    private fun observeFramePacing() {
+        scope.launch {
+            while (!nativeClosed) {
+                delay(2_000)
+                if (!DesktopRuntimeLog.debugEnabled || nativeClosed) continue
+                if (stateFlow.value.phase != DesktopPlayerPhase.Playing) continue
+                collectFramePacingSample()?.let { sample ->
+                    synchronized(framePacingSamples) {
+                        framePacingSamples.addLast(sample)
+                        while (framePacingSamples.size > 30) {
+                            framePacingSamples.removeFirst()
+                        }
+                    }
+                    DesktopRuntimeLog.info("MPV framePacing sample $sample")
+                }
+            }
+        }
+    }
+
+    private fun collectFramePacingSample(): String? =
+        runCatching {
+            val state = stateFlow.value
+            "phase=${state.phase} pos=${state.positionMs}ms " +
+                "vfFps=${mpvHandle.getMpvStringPropertyOrNull("estimated-vf-fps") ?: "n/a"} " +
+                "estimatedFrames=${mpvHandle.getMpvStringPropertyOrNull("estimated-frame-count") ?: "n/a"} " +
+                "voDropped=${mpvHandle.getMpvStringPropertyOrNull("frame-drop-count") ?: "n/a"} " +
+                "decoderDropped=${mpvHandle.getMpvStringPropertyOrNull("decoder-frame-drop-count") ?: "n/a"} " +
+                "mistimed=${mpvHandle.getMpvStringPropertyOrNull("mistimed-frame-count") ?: "n/a"} " +
+                "delayed=${mpvHandle.getMpvStringPropertyOrNull("vo-delayed-frame-count") ?: "n/a"} " +
+                "displaySync=${mpvHandle.getMpvStringPropertyOrNull("display-sync-active") ?: "n/a"} " +
+                "avsync=${mpvHandle.getMpvStringPropertyOrNull("avsync") ?: "n/a"}"
+        }.onFailure {
+            DesktopRuntimeLog.warn("MPV framePacing sample failed message=${it.message}")
+        }.getOrNull()
+
+    private fun emitFramePacingSummary(reason: String) {
+        if (!DesktopRuntimeLog.debugEnabled) return
+        val samples = synchronized(framePacingSamples) {
+            framePacingSamples.toList().also { framePacingSamples.clear() }
+        }
+        if (samples.isEmpty()) return
+        DesktopRuntimeLog.info(
+            "MPV framePacing summary reason=$reason sampleCount=${samples.size} " +
+                "latest=${samples.takeLast(5).joinToString(separator = " | ")}",
         )
+    }
+
+    private fun observePlaybackSettings() {
+        DesktopMpvPlaybackSettingsSignal.version
+            .drop(1)
+            .onEach {
+                if (!nativeClosed) {
+                    applyDecoderSettings()
+                }
+            }
+            .launchIn(scope)
     }
 
     private fun updateDisplayWakeLock(phase: DesktopPlayerPhase) {
@@ -228,6 +313,59 @@ internal class MpvDesktopPlayerBackend private constructor(
         WindowsDisplayWakeLock.release("$backendName:$id:$reason")
     }
 
+    private fun applyDecoderSettings() {
+        if (nativeClosed) return
+        val tuning = loadDesktopMpvVideoTuning()
+        val options = mpvRuntimeOptions(tuning)
+        val appliedOptions = mutableListOf<String>()
+        val skippedOptions = mutableListOf<String>()
+
+        options.forEach { option ->
+            runCatching {
+                mpvHandle.setMpvRuntimeOption(option.name, option.value)
+            }.onSuccess { applied ->
+                val entry = "${option.name}=${option.value}"
+                if (applied) {
+                    appliedOptions += entry
+                } else {
+                    skippedOptions += entry
+                }
+            }.onFailure {
+                DesktopRuntimeLog.warn(
+                    "MPV video tuning: failed preset=${tuning.settings.outputPreset} " +
+                        "${option.name}=${option.value} message=${it.message}",
+                )
+            }
+        }
+
+        DesktopRuntimeLog.info(
+            "MPV video tuning: preset=${tuning.settings.outputPreset} legacyHdr=${tuning.legacyHdrMode.storageValue} " +
+                "applied=${appliedOptions.size}/${options.size} skipped=${skippedOptions.size} " +
+                "options=${appliedOptions.joinToString(",")}" +
+                if (skippedOptions.isNotEmpty()) " skippedOptions=${skippedOptions.joinToString(",")}" else "",
+        )
+    }
+
+    private fun applyCursorSettings() {
+        if (nativeClosed) return
+        runCatching {
+            mpvHandle.setMpvRuntimeOption("cursor-autohide", "1000")
+            mpvHandle.setMpvRuntimeOption("cursor-autohide-fs-only", "no")
+            DesktopRuntimeLog.info("MPV cursor autohide configured")
+        }.onFailure {
+            DesktopRuntimeLog.warn("MPV cursor autohide configuration failed message=${it.message}")
+        }
+    }
+
+    private fun fail(error: DesktopPlayerError) {
+        releaseDisplayWakeLock("fail-${error::class.simpleName}")
+        stateFlow.value = stateFlow.value.copy(
+            phase = DesktopPlayerPhase.Error,
+            error = error,
+            diagnostics = error.technicalMessage,
+        )
+    }
+
     private fun canReceiveCommands(): Boolean =
         !stopped && !nativeClosed && player.getCurrentPlaybackState() != PlaybackState.FINISHED
 
@@ -243,9 +381,9 @@ internal class MpvDesktopPlayerBackend private constructor(
         externalSubtitleActive = false
         clearExternalSubtitleTempFiles(reason)
         runCatching {
-            player.impl.setMpvRuntimeOption("sub-codepage", EmbeddedSubtitleCodepage)
-            player.impl.setMpvRuntimeOption("embeddedfonts", "yes")
-            player.impl.setMpvRuntimeOption("sub-ass-override", EmbeddedSubtitleAssOverride)
+            mpvHandle.setMpvRuntimeOption("sub-codepage", EmbeddedSubtitleCodepage)
+            mpvHandle.setMpvRuntimeOption("embeddedfonts", "yes")
+            mpvHandle.setMpvRuntimeOption("sub-ass-override", EmbeddedSubtitleAssOverride)
         }.onFailure { DesktopRuntimeLog.warn("MPV reset external subtitle state failed reason=$reason message=${it.message}") }
     }
 
@@ -257,7 +395,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             val before = snapshotForLog()
             val result = runCatching {
                 player.resume()
-                player.impl.setPropertyBoolean("pause", false)
+                mpvHandle.setPropertyBoolean("pause", false)
             }
             DesktopRuntimeLog.info("MPV controller play before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
             result.onFailure { DesktopRuntimeLog.error("MPV controller play failed", it) }
@@ -276,7 +414,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             val durationMs = durationMs()
             val targetMs = positionMs.coerceAtLeast(0L).let { target -> durationMs?.let(target::coerceAtMost) ?: target }
             val before = snapshotForLog()
-            val result = runCatching { player.impl.command("seek", (targetMs / 1000.0).toString(), "absolute+exact") }
+            val result = runCatching { mpvHandle.command("seek", (targetMs / 1000.0).toString(), "absolute+exact") }
             if (result.getOrNull() == true) player.currentPositionMillis.value = targetMs
             DesktopRuntimeLog.info(
                 "MPV controller seekTo targetMs=$targetMs durationMs=${durationMs ?: -1} " +
@@ -292,6 +430,12 @@ internal class MpvDesktopPlayerBackend private constructor(
 
         override fun retry() = play()
 
+        override fun configureIosVideoOutput(settings: PlayerSettingsUiState) {
+            if (!canReceiveCommands()) return
+            storeDesktopVideoTuningFromPlayerSettings(settings)
+            applyDecoderSettings()
+        }
+
         override fun setPlaybackSpeed(speed: Float) {
             if (!canReceiveCommands()) return
             player.features[PlaybackSpeed]?.set(speed.coerceIn(0.25f, 4.0f))
@@ -299,13 +443,13 @@ internal class MpvDesktopPlayerBackend private constructor(
 
         override fun currentVolume(): PlayerAudioLevel? {
             if (!canReceiveCommands()) return null
-            val volume = player.impl.getMpvStringProperty("volume")
+            val volume = mpvHandle.getMpvStringProperty("volume")
                 .toDoubleOrNull()
                 ?.div(100.0)
                 ?.toFloat()
                 ?.coerceIn(0f, 1f)
                 ?: return null
-            val muted = player.impl.getMpvBooleanProperty("mute")
+            val muted = mpvHandle.getMpvBooleanProperty("mute")
             return PlayerAudioLevel(
                 fraction = volume,
                 isMuted = muted || volume <= 0.001f,
@@ -316,8 +460,8 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (!canReceiveCommands()) return null
             val target = level.coerceIn(0f, 1f)
             runCatching {
-                player.impl.setMpvProperty("volume", (target * 100.0).coerceIn(0.0, 100.0))
-                player.impl.setMpvProperty("mute", target <= 0.001f)
+                mpvHandle.setMpvProperty("volume", (target * 100.0).coerceIn(0.0, 100.0))
+                mpvHandle.setMpvProperty("mute", target <= 0.001f)
             }.onFailure {
                 DesktopRuntimeLog.error("MPV controller setVolume failed target=$target", it)
             }
@@ -325,16 +469,16 @@ internal class MpvDesktopPlayerBackend private constructor(
         }
 
         override fun getAudioTracks(): List<AudioTrack> =
-            if (canReceiveCommands()) runCatching { player.impl.audioTracks() }.getOrDefault(emptyList()) else emptyList()
+            if (canReceiveCommands()) runCatching { mpvHandle.audioTracks() }.getOrDefault(emptyList()) else emptyList()
 
         override fun getSubtitleTracks(): List<SubtitleTrack> =
-            if (canReceiveCommands()) runCatching { player.impl.subtitleTracks() }.getOrDefault(emptyList()) else emptyList()
+            if (canReceiveCommands()) runCatching { mpvHandle.subtitleTracks() }.getOrDefault(emptyList()) else emptyList()
 
         override fun selectAudioTrack(index: Int) {
             if (!canReceiveCommands()) return
             val tracks = getAudioTracks()
             if (index in tracks.indices) {
-                runCatching { player.impl.setMpvProperty("aid", tracks[index].id) }
+                runCatching { mpvHandle.setMpvProperty("aid", tracks[index].id) }
                     .onFailure { DesktopRuntimeLog.error("MPV selectAudioTrack failed index=$index", it) }
             }
         }
@@ -344,7 +488,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (index < 0) {
                 runCatching {
                     externalSubtitleActive = false
-                    player.impl.setMpvProperty("sid", "no")
+                    mpvHandle.setMpvProperty("sid", "no")
                     applySubtitleStyleToCurrentTrack(latestSubtitleStyle, reason = "select-none")
                 }
                 return
@@ -353,7 +497,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (index in tracks.indices) {
                 runCatching {
                     externalSubtitleActive = false
-                    player.impl.setMpvProperty("sid", tracks[index].id)
+                    mpvHandle.setMpvProperty("sid", tracks[index].id)
                     applySubtitleStyleToCurrentTrack(latestSubtitleStyle, reason = "select-built-in")
                 }
                     .onFailure { DesktopRuntimeLog.error("MPV selectSubtitleTrack failed index=$index", it) }
@@ -366,8 +510,8 @@ internal class MpvDesktopPlayerBackend private constructor(
             removeExternalSubtitleTracks(cancelPendingRequest = false, reason = "replace-external")
             runCatching {
                 externalSubtitleActive = true
-                player.impl.setMpvRuntimeOption("sub-codepage", ExternalSubtitleCodepage)
-                player.impl.setMpvRuntimeOption("sub-visibility", "yes")
+                mpvHandle.setMpvRuntimeOption("sub-codepage", ExternalSubtitleCodepage)
+                mpvHandle.setMpvRuntimeOption("sub-visibility", "yes")
                 applySubtitleStyleToCurrentTrack(latestSubtitleStyle, reason = "set-external-preload")
             }
                 .onFailure { DesktopRuntimeLog.error("MPV setSubtitleUri failed url=${url.redactedMediaUrl()}", it) }
@@ -384,9 +528,9 @@ internal class MpvDesktopPlayerBackend private constructor(
                     return@launch
                 }
                 runCatching {
-                    player.impl.setMpvRuntimeOption("sub-codepage", ExternalSubtitleCodepage)
-                    player.impl.setMpvRuntimeOption("sub-visibility", "yes")
-                    player.impl.command("sub-add", subtitleRef, "select")
+                    mpvHandle.setMpvRuntimeOption("sub-codepage", ExternalSubtitleCodepage)
+                    mpvHandle.setMpvRuntimeOption("sub-visibility", "yes")
+                    mpvHandle.command("sub-add", subtitleRef, "select")
                     selectNewestExternalSubtitle()
                     applySubtitleStyleToCurrentTrack(latestSubtitleStyle, reason = "set-external")
                 }.onFailure {
@@ -404,7 +548,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (cancelPendingRequest) {
                 externalSubtitleRequestCounter.incrementAndGet()
             }
-            val handle = player.impl
+            val handle = mpvHandle
             val hadExternalSubtitle = externalSubtitleActive
             val count = handle.getMpvIntProperty("track-list/count")
             if (count == null) {
@@ -431,7 +575,7 @@ internal class MpvDesktopPlayerBackend private constructor(
         }
 
         private fun selectNewestExternalSubtitle() {
-            val handle = player.impl
+            val handle = mpvHandle
             val count = handle.getMpvIntProperty("track-list/count") ?: return
             var newestExternalSubtitleId: Int? = null
             for (i in 0 until count) {
@@ -459,7 +603,7 @@ internal class MpvDesktopPlayerBackend private constructor(
 
         private fun applySubtitleStyleToCurrentTrack(style: SubtitleStyleState, reason: String) {
             if (!canReceiveCommands()) return
-            val handle = player.impl
+            val handle = mpvHandle
             val colorHex = style.textColor.toMpvColorString()
             val outline = if (style.outlineEnabled) 2.0 else 0.0
             val subPos = 100 - style.bottomOffset
@@ -469,9 +613,6 @@ internal class MpvDesktopPlayerBackend private constructor(
                 val assOverrideMode = if (useExternalSubtitleStyle) ExternalSubtitleAssOverride else EmbeddedSubtitleAssOverride
                 val codepage = if (useExternalSubtitleStyle) ExternalSubtitleCodepage else EmbeddedSubtitleCodepage
 
-                // Desktop MPV already renders ASS/SSA through libass. Preserve authored ASS/SSA
-                // styles and embedded fonts for embedded tracks. External addon subtitles are
-                // normalized to app-controlled plain text, so they follow Nuvio style and placement.
                 handle.setMpvRuntimeOption("sub-codepage", codepage)
                 handle.setMpvRuntimeOption("embeddedfonts", "yes")
                 handle.setMpvRuntimeOption("sub-ass-override", assOverrideMode)
