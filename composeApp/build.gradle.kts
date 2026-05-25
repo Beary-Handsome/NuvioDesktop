@@ -362,6 +362,7 @@ tasks.withType<KotlinCompilationTask<*>>().configureEach {
 
 kotlin {
     if (System.getenv("ANDROID_HOME") != null) {
+        @Suppress("DEPRECATION")
         androidTarget {
             compilerOptions {
                 jvmTarget.set(JvmTarget.JVM_11)
@@ -676,8 +677,10 @@ val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime"
     }
     into(nativeDir)
 
+    // This task patches lib/app/Nuvio.cfg after the native .so files have been copied.
+    // Note: appDirectory was previously declared but is not needed; it is left as an inline
+    // reference if needed later.
     doLast {
-        val appDirectory = appDir.get().asFile
         val nativeDirectory = nativeDir.get().asFile
         val launcherDirectory = launcherDir.get().asFile
         val cfgFile = launcherDirectory.resolve("lib/app/Nuvio.cfg")
@@ -756,10 +759,11 @@ Terminal=false
 StartupNotify=true
 """)
 
-        val iconFile = project.file("desktop-icons/nuvio_window_icon.png").takeIf { it.exists() }
-            ?: logger.warn("Icon file not found at desktop-icons/nuvio_window_icon.png; AppImage will lack an icon")
-        if (iconFile != null) {
+        val iconFile = project.file("desktop-icons/nuvio_window_icon.png")
+        if (iconFile.exists()) {
             iconFile.copyTo(appDir.resolve("nuvio.png"), overwrite = true)
+        } else {
+            logger.warn("Icon file not found at desktop-icons/nuvio_window_icon.png; AppImage will lack an icon")
         }
 
         val outputFile = outputDir.get().asFile.resolve("Nuvio-${releaseAppVersionName}-x86_64.AppImage")
