@@ -105,8 +105,16 @@ jobs:
         run: |
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O /tmp/appimagetool
           chmod +x /tmp/appimagetool
-          /tmp/appimagetool --appimage-extract > /dev/null 2>&1
-          sudo mv /tmp/squashfs-root/AppRun /usr/local/bin/appimagetool
+          cd /tmp && ./appimagetool --appimage-extract > /dev/null 2>&1
+          if [ -f /tmp/squashfs-root/AppRun ]; then
+            sudo mv /tmp/squashfs-root/AppRun /usr/local/bin/appimagetool
+          elif [ -f /tmp/squashfs-root/usr/bin/appimagetool ]; then
+            sudo mv /tmp/squashfs-root/usr/bin/appimagetool /usr/local/bin/appimagetool
+          else
+            echo "ERROR: appimagetool binary not found in extracted AppImage"
+            ls -la /tmp/squashfs-root/ 2>/dev/null || echo "No squashfs-root dir"
+            exit 1
+          fi
           rm -rf /tmp/squashfs-root /tmp/appimagetool
           appimagetool --version
 
