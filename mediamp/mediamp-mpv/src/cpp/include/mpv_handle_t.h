@@ -65,7 +65,7 @@ bool detach_window_surface();
 
 #if defined(_WIN32) || defined(__linux__)
 // Render API (Windows x64 / Linux)
-bool create_render_context(uintptr_t device_ptr, uintptr_t context_ptr);
+bool create_render_context(uintptr_t device_ptr, uintptr_t context_ptr, uintptr_t drawable_ptr = 0);
 bool destroy_render_context();
 
 GLuint create_texture(int width, int height);
@@ -108,6 +108,8 @@ HDC device_ = nullptr;
 	GLXDrawable glx_drawable_ = None;
 	bool owns_glx_display_ = false;
 	bool owns_glx_drawable_ = false;
+	GLXContext glx_context_ = nullptr;
+	bool owns_glx_context_ = false;
 #endif
 
 std::shared_ptr<mediampv::compatible_thread> event_thread_;

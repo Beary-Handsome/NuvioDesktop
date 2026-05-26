@@ -18,20 +18,21 @@ internal actual object ExternalPlayerPlatform {
         val executable = player.id
 
         val args = mutableListOf(executable)
+        val execLower = executable.lowercase()
         when {
-            executable.contains("vlc") -> {
+            execLower.contains("vlc") -> {
                 args.add(request.sourceUrl)
                 args.add("--play-and-exit")
             }
-            executable.contains("mpv") || executable.contains("celluloid") -> {
+            execLower.contains("mpv") || execLower.contains("celluloid") -> {
                 args.add(request.sourceUrl)
             }
-            executable.contains("iina") -> {
+            execLower.contains("iina") -> {
                 args.add("--no-stdin")
                 args.add("--keep-running")
                 args.add(request.sourceUrl)
             }
-            executable.contains("kodi") -> {
+            execLower.contains("kodi") -> {
                 args.add("--play")
                 args.add(request.sourceUrl)
             }
@@ -42,7 +43,8 @@ internal actual object ExternalPlayerPlatform {
 
         return try {
             val pb = ProcessBuilder(args)
-                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
             pb.start()
             ExternalPlayerOpenResult.Opened
         } catch (e: Exception) {
@@ -64,11 +66,40 @@ internal actual object ExternalPlayerPlatform {
     }
 
     private fun linuxPlayers(): List<ExternalPlayerApp> {
-        val players = mutableListOf<ExternalPlayerApp>()
-        resolveInPath("vlc")?.let { players.add(ExternalPlayerApp(it, "VLC")) }
-        resolveInPath("mpv")?.let { players.add(ExternalPlayerApp(it, "MPV")) }
-        resolveInPath("kodi")?.let { players.add(ExternalPlayerApp(it, "Kodi")) }
-        return players
+        val candidates = mutableListOf<Pair<String, String>>()
+        fun add(path: String?, displayName: String) {
+            if (path != null) candidates.add(path to displayName)
+        }
+        add(resolveInPath("vlc"), "VLC")
+        add(resolveInPath("mpv"), "MPV")
+        add(resolveInPath("celluloid"), "Celluloid")
+        add(resolveInPath("kodi"), "Kodi")
+        // Flatpak exports use reverse-domain names (e.g. tv.kodi.Kodi)
+        add(resolveLinuxFlatpakPath("tv.kodi.Kodi"), "Kodi")
+        add(resolveLinuxFlatpakPath("org.videolan.VLC"), "VLC")
+        add(resolveLinuxFlatpakPath("io.mpv.Mpv"), "MPV")
+        add(resolveLinuxFlatpakPath("io.github.celluloid_player.Celluloid"), "Celluloid")
+        add(resolveLinuxSnapPath("kodi"), "Kodi")
+        add(resolveLinuxSnapPath("vlc"), "VLC")
+        add(resolveLinuxSnapPath("mpv"), "MPV")
+        return candidates.distinctBy { it.first }.map { (path, name) ->
+            ExternalPlayerApp(path, name)
+        }
+    }
+
+    private fun resolveLinuxFlatpakPath(name: String): String? {
+        val home = System.getProperty("user.home") ?: return null
+        val flatpakDirs = listOf(
+            "/var/lib/flatpak/exports/bin",
+            "$home/.local/share/flatpak/exports/bin",
+        )
+        return flatpakDirs.firstOrNull { dir -> File(dir, name).canExecute() }
+            ?.let { dir -> File(dir, name).absolutePath }
+    }
+
+    private fun resolveLinuxSnapPath(name: String): String? {
+        val snapDir = "/snap/bin"
+        return if (File(snapDir, name).canExecute()) File(snapDir, name).absolutePath else null
     }
 
     private fun windowsPlayers(): List<ExternalPlayerApp> {

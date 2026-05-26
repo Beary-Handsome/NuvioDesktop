@@ -96,14 +96,23 @@ enum class PlayerTargetTransfer(val mpvValue: String) {
     Hlg("hlg"),
 }
 
-enum class PlayerHardwareDecoderMode(val mpvValue: String) {
-    Auto("auto"),
-    Off("no"),
-    D3d11va("d3d11va"),
-    D3d11vaCopy("d3d11va-copy"),
-    Dxva2("dxva2"),
-    Nvdec("nvdec"),
-    NvdecCopy("nvdec-copy"),
+enum class PlayerHardwareDecoderMode(
+    val mpvValue: String,
+    val label: String,
+) {
+    Auto("auto", "Auto"),
+    Off("no", "Off"),
+    D3d11va("d3d11va", "D3D11VA"),
+    D3d11vaCopy("d3d11va-copy", "D3D11VA (copy)"),
+    Dxva2("dxva2", "DXVA2"),
+    Nvdec("nvdec", "NVDEC"),
+    NvdecCopy("nvdec-copy", "NVDEC (copy)"),
+    Vaapi("vaapi", "VA-API"),
+    VaapiCopy("vaapi-copy", "VA-API (copy)"),
+    Vdpau("vdpau", "VDPAU"),
+    VdpauCopy("vdpau-copy", "VDPAU (copy)"),
+    Cuda("cuda", "CUDA"),
+    CudaCopy("cuda-copy", "CUDA (copy)"),
 }
 
 data class PlayerVideoTuningSettings(

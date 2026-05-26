@@ -16,7 +16,7 @@ internal interface DesktopMPVBridgeLib : Library {
             if (libPath != null) {
                 System.setProperty(
                     "jna.library.path",
-                    (System.getProperty("jna.library.path") ?: "") + ":" + libPath,
+                    (System.getProperty("jna.library.path") ?: "") + File.pathSeparator + libPath,
                 )
             }
             Native.load("DesktopMPVBridge", DesktopMPVBridgeLib::class.java)

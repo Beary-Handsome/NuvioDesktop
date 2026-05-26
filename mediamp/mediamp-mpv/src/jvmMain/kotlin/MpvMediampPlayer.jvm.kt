@@ -99,8 +99,8 @@ actual class MpvMediampPlayer(
     }
 
     @InternalMediampApi
-    fun createRenderContext(devicePtr: Long, contextPtr: Long): Boolean {
-        return createRenderContext(handle.ptr, devicePtr, contextPtr)
+    fun createRenderContext(devicePtr: Long, contextPtr: Long, drawablePtr: Long = 0L): Boolean {
+        return createRenderContext(handle.ptr, devicePtr, contextPtr, drawablePtr)
     }
 
     @InternalMediampApi
@@ -176,9 +176,11 @@ actual class MpvMediampPlayer(
 
             is Platform.Linux -> {
                 val isWayland = System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
-                handle.option("ao", if (isWayland) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
+                val hasX11Display = System.getenv("DISPLAY")?.isNotEmpty() == true
+                val useWaylandEGL = isWayland && !hasX11Display
+                handle.option("ao", if (useWaylandEGL) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
                 handle.option("vo", "libmpv")
-                handle.option("gpu-context", if (isWayland) "wayland" else "x11egl")
+                handle.option("gpu-context", if (useWaylandEGL) "wayland" else "x11egl")
             }
 
             else -> {}

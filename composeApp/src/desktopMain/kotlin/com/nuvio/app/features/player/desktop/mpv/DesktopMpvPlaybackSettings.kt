@@ -2,7 +2,6 @@ package com.nuvio.app.features.player.desktop.mpv
 
 import com.nuvio.app.desktop.DesktopPreferences
 import com.nuvio.app.desktop.DesktopRuntimeLog
-import com.nuvio.app.features.player.IosHardwareDecoderMode
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.IosToneMappingMode
@@ -161,11 +160,6 @@ internal fun storeDesktopVideoTuningFromPlayerSettings(settings: PlayerSettingsU
     )
     DesktopPreferences.putString(
         DesktopDecoderPreferencesName,
-        DesktopHwdecModeKey,
-        settings.iosHardwareDecoderMode.toDesktopHardwareDecoderMode().name,
-    )
-    DesktopPreferences.putString(
-        DesktopDecoderPreferencesName,
         DesktopToneMappingModeKey,
         settings.iosToneMappingMode.toDesktopToneMappingMode().name,
     )
@@ -252,7 +246,7 @@ private fun diagnosticRuntimeOptions(): List<MpvRuntimeOption> =
             name = "hwdec",
             propertyName = "nuvio.mpv.diagnostic.hwdec",
             envName = "NUVIO_MPV_DIAGNOSTIC_HWDEC",
-            allowedValues = setOf("auto", "no", "d3d11va", "d3d11va-copy", "dxva2", "nvdec", "nvdec-copy"),
+            allowedValues = setOf("auto", "no", "d3d11va", "d3d11va-copy", "dxva2", "nvdec", "nvdec-copy", "vaapi", "vaapi-copy", "vdpau", "vdpau-copy", "cuda", "cuda-copy"),
         ),
         boundedDiagnosticOption(
             name = "framedrop",
@@ -292,7 +286,7 @@ private fun boundedDiagnosticOption(
         ?.let { MpvRuntimeOption(name, it) }
 }
 
-private fun loadHardwareDecoderMode(): PlayerHardwareDecoderMode {
+internal fun loadHardwareDecoderMode(): PlayerHardwareDecoderMode {
     val storedValue = DesktopPreferences.getString(DesktopDecoderPreferencesName, DesktopHwdecModeKey)
     return storedValue?.enumValueOrNull<PlayerHardwareDecoderMode>()
         ?: storedValue?.legacyHwdecValue()?.enumValueOrNull<PlayerHardwareDecoderMode>()
@@ -315,6 +309,12 @@ private fun String.legacyHwdecValue(): String? =
         "dxva2" -> PlayerHardwareDecoderMode.Dxva2.name
         "nvdec" -> PlayerHardwareDecoderMode.Nvdec.name
         "nvdec-copy" -> PlayerHardwareDecoderMode.NvdecCopy.name
+        "vaapi" -> PlayerHardwareDecoderMode.Vaapi.name
+        "vaapi-copy" -> PlayerHardwareDecoderMode.VaapiCopy.name
+        "vdpau" -> PlayerHardwareDecoderMode.Vdpau.name
+        "vdpau-copy" -> PlayerHardwareDecoderMode.VdpauCopy.name
+        "cuda" -> PlayerHardwareDecoderMode.Cuda.name
+        "cuda-copy" -> PlayerHardwareDecoderMode.CudaCopy.name
         else -> null
     }
 
@@ -354,13 +354,6 @@ private fun IosVideoOutputPreset.toDesktopPreset(): PlayerVideoOutputPreset =
         IosVideoOutputPreset.SdrToneMapped -> PlayerVideoOutputPreset.ToneMappedSdr
         IosVideoOutputPreset.Compatibility -> PlayerVideoOutputPreset.Compatibility
         IosVideoOutputPreset.Custom -> PlayerVideoOutputPreset.Custom
-    }
-
-private fun IosHardwareDecoderMode.toDesktopHardwareDecoderMode(): PlayerHardwareDecoderMode =
-    when (this) {
-        IosHardwareDecoderMode.Auto,
-        IosHardwareDecoderMode.VideoToolbox -> PlayerHardwareDecoderMode.Auto
-        IosHardwareDecoderMode.Off -> PlayerHardwareDecoderMode.Off
     }
 
 private fun IosToneMappingMode.toDesktopToneMappingMode(): PlayerToneMappingMode =

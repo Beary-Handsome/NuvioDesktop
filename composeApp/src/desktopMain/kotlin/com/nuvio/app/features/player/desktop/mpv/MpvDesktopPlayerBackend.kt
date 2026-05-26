@@ -116,6 +116,7 @@ internal class MpvDesktopPlayerBackend private constructor(
         currentRequest = request
         stopped = false
         stateFlow.value = stateFlow.value.copy(phase = DesktopPlayerPhase.Preparing, error = null)
+        applyHwdecAtLoad()
         runCatching {
             val headers = request.sourceHeaders.toMutableMap()
             DesktopRuntimeLog.info(
@@ -321,6 +322,10 @@ internal class MpvDesktopPlayerBackend private constructor(
         val skippedOptions = mutableListOf<String>()
 
         options.forEach { option ->
+            if (option.name == "hwdec") {
+                skippedOptions += "${option.name}=${option.value} (deferred to next load)"
+                return@forEach
+            }
             runCatching {
                 mpvHandle.setMpvRuntimeOption(option.name, option.value)
             }.onSuccess { applied ->
@@ -344,6 +349,16 @@ internal class MpvDesktopPlayerBackend private constructor(
                 "options=${appliedOptions.joinToString(",")}" +
                 if (skippedOptions.isNotEmpty()) " skippedOptions=${skippedOptions.joinToString(",")}" else "",
         )
+    }
+
+    private fun applyHwdecAtLoad() {
+        val hwdecTuning = loadDesktopMpvVideoTuning()
+        mpvRuntimeOptions(hwdecTuning)
+            .filter { it.name == "hwdec" }
+            .forEach { option ->
+                runCatching { mpvHandle.setMpvRuntimeOption(option.name, option.value) }
+                    .onFailure { DesktopRuntimeLog.warn("MPV hwdec apply at load failed message=${it.message}") }
+            }
     }
 
     private fun applyCursorSettings() {

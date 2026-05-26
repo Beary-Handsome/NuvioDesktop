@@ -18,7 +18,7 @@ internal actual fun detachSurface(ptr: Long): Boolean {
     TODO()
 }
 
-actual fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long): Boolean {
+actual fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long, @Suppress("UNUSED_PARAMETER") drawablePtr: Long): Boolean {
     error("only implemented on desktop")
 }
 

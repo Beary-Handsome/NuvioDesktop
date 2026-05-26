@@ -40,11 +40,12 @@ import java.awt.AWTEvent
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
 import java.awt.Point
-import java.awt.Robot
 import java.awt.Toolkit
 import java.awt.event.AWTEventListener
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
+import java.awt.event.WindowEvent
+import java.awt.event.WindowFocusListener
 import java.awt.image.BufferedImage
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -1152,8 +1153,21 @@ actual fun ManageFullscreenKeyboardShortcuts(
             AWTEvent.MOUSE_EVENT_MASK,
         )
 
+        // Force a full window repaint when focus is regained after external
+        // player closes. This helps recover the Skia/OpenGL rendering context
+        // on Linux, which can otherwise freeze after a window focus change.
+        val focusListener = object : WindowFocusListener {
+            override fun windowGainedFocus(e: WindowEvent?) {
+                composeWindow.repaint()
+                Toolkit.getDefaultToolkit().sync()
+            }
+            override fun windowLostFocus(e: WindowEvent?) = Unit
+        }
+        composeWindow.addWindowFocusListener(focusListener)
+
         onDispose {
             keyboardFocusManager.removeKeyEventDispatcher(dispatcher)
+            composeWindow.removeWindowFocusListener(focusListener)
             Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener)
         }
     }

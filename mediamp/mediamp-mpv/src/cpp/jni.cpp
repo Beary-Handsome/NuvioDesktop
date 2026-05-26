@@ -46,7 +46,7 @@ JNIEXPORT jboolean JNICALL FN(nUnobserveProperty)(JNIEnv *env, jclass clazz, jlo
 JNIEXPORT jboolean JNICALL FN_ANDROID(nAttachAndroidSurface)(JNIEnv *env, jclass clazz, jlong ptr, jobject surface);
 JNIEXPORT jboolean JNICALL FN_ANDROID(nDetachAndroidSurface)(JNIEnv *env, jclass clazz, jlong ptr);
 
-JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv *env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr);
+JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv *env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr, jlong drawable_ptr);
 JNIEXPORT jboolean JNICALL FN_DESKTOP(nDestroyRenderContext)(JNIEnv *env, jclass clazz, jlong ptr);
 JNIEXPORT jint JNICALL FN_DESKTOP(nCreateTexture)(JNIEnv *env, jclass clazz, jlong ptr, jint width, jint height);
 JNIEXPORT jboolean JNICALL FN_DESKTOP(nReleaseTexture)(JNIEnv *env, jclass clazz, jlong ptr);
@@ -252,11 +252,12 @@ return instance->detach_android_surface(env);
 
 #if defined(_WIN32) || defined(__linux__)
 
-JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv * env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr) {
+JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv * env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr, jlong drawable_ptr) {
 auto *instance = reinterpret_cast<mediampv::mpv_handle_t *>(static_cast<uintptr_t>(ptr));
 return instance->create_render_context(
 static_cast<uintptr_t>(device_ptr),
-static_cast<uintptr_t>(context_ptr));
+static_cast<uintptr_t>(context_ptr),
+static_cast<uintptr_t>(drawable_ptr));
 }
 
 JNIEXPORT jboolean JNICALL FN_DESKTOP(nDestroyRenderContext)(JNIEnv * env, jclass clazz, jlong ptr) {
@@ -292,7 +293,7 @@ return env->NewStringUTF(stats.c_str());
 
 #else
 
-JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv * env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr) {
+JNIEXPORT jboolean JNICALL FN_DESKTOP(nCreateRenderContext)(JNIEnv * env, jclass clazz, jlong ptr, jlong device_ptr, jlong context_ptr, jlong drawable_ptr) {
 return JNI_FALSE;
 }
 

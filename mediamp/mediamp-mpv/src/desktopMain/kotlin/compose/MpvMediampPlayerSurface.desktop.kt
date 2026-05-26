@@ -53,6 +53,7 @@ actual fun MpvMediampPlayerSurface(
     var lastLoggedRenderFailure by remember(player) { mutableStateOf<String?>(null) }
     var lastLoggedReadPixels by remember(player) { mutableStateOf<String?>(null) }
     var lastLoggedMpvProps by remember(player) { mutableStateOf<String?>(null) }
+    var pendingTextureSize by remember(player) { mutableStateOf<Size?>(null) }
     val interpolator = remember(player) { FrameInterpolator() }
     val renderDebugMode = remember {
         System.getProperty("nuvio.mpv.render.debug")
@@ -90,7 +91,7 @@ actual fun MpvMediampPlayerSurface(
         if (renderContextInitialized && lastContextSignature == components.contextSignature) return true
         runCatching { components.directContext.resetGLAll() }
         val contextCreated = runCatching {
-            player.createRenderContext(components.glDevice, components.glContext)
+            player.createRenderContext(components.glDevice, components.glContext, components.glDrawable)
         }.getOrDefault(false)
         renderContextInitialized = contextCreated
         lastContextSignature = if (contextCreated) components.contextSignature else null
@@ -119,7 +120,7 @@ actual fun MpvMediampPlayerSurface(
         runCatching { components.directContext.resetGLAll() }
 
         val contextCreated = runCatching {
-            player.createRenderContext(components.glDevice, components.glContext)
+            player.createRenderContext(components.glDevice, components.glContext, components.glDrawable)
         }.getOrDefault(false)
         renderContextInitialized = contextCreated
         lastContextSignature = if (contextCreated) components.contextSignature else null
@@ -140,10 +141,11 @@ actual fun MpvMediampPlayerSurface(
     DisposableEffect(components, player) {
         if (components == null) return@DisposableEffect onDispose { }
 
-        // Try early, but do not make this one-shot. During Windows window
-        // creation/resizes Skiko's GL handles can be temporarily unusable; the
-        // Canvas path below retries instead of leaving a permanent black layer.
-        createRenderContextIfNeeded(components)
+        // On Linux, GL context is NOT current during composition phase. The
+        // Canvas callback below is where OpenGL context is bound to the thread,
+        // so we defer context creation to the first Canvas frame instead.
+        // On Windows, wglMakeCurrent tolerates being called without a current
+        // context, so the Canvas path also works there.
 
         onDispose {
             releaseTextureResources()
@@ -203,6 +205,25 @@ actual fun MpvMediampPlayerSurface(
                 }
                 return@Canvas
             }
+
+            // Defer texture recreation when the size is still changing — going
+            // fullscreen can trigger 3+ rapid resize events and recreating the
+            // texture on each one produces visible black flicker.
+            if (player.currentSize != null && textureId != 0) {
+                if (pendingTextureSize != physicalSize) {
+                    pendingTextureSize = physicalSize
+                    if (lastLoggedSurfaceSize != surfaceSizeKey) {
+                        logSurface(
+                            "surfaceSizeDeferred size=$surfaceSizeKey currentSize=${player.currentSize} " +
+                                "textureId=$textureId player=${System.identityHashCode(player)}",
+                        )
+                        lastLoggedSurfaceSize = surfaceSizeKey
+                    }
+                    return@Canvas
+                }
+                pendingTextureSize = null
+            }
+
             val previousSize = player.currentSize
             if (lastLoggedSurfaceSize != surfaceSizeKey) {
                 logSurface(
@@ -213,12 +234,16 @@ actual fun MpvMediampPlayerSurface(
                 lastLoggedSurfaceSize = surfaceSizeKey
             }
 
-            // Close Skia's wrappers before replacing the native GL texture, but
-            // do not delete the old native texture here. Native createTexture()
-            // allocates the replacement first and deletes the old texture only
-            // after the new FBO is valid, preventing GL from immediately
-            // recycling the same texture ID under Skia's cache.
-            releaseSkiaTextureResources()
+            // Keep old Skia wrappers alive during texture recreation so
+            // drawImageRect below never sees null (which would produce a
+            // black frame). Close them only after the new texture is fully
+            // adopted.
+            val oldImage = player.image
+            val oldBackendTexture = player.backendTexture
+            player.image = null
+            player.backendTexture = null
+            textureId = 0
+            player.currentSize = null
 
             // Keep libmpv's render context alive on normal size changes. The
             // render API documents that freeing an active render context
@@ -241,6 +266,8 @@ actual fun MpvMediampPlayerSurface(
                 if (backendTexture == null) {
                     player.currentSize = null
                     textureId = 0
+                    oldImage?.close()
+                    oldBackendTexture?.close()
                 } else {
                     player.backendTexture = backendTexture
                     val adoptedImage = runCatching {
@@ -255,11 +282,16 @@ actual fun MpvMediampPlayerSurface(
                     if (adoptedImage == null) {
                         textureId = 0
                         player.currentSize = null
+                        oldImage?.close()
+                        oldBackendTexture?.close()
                         logSurface(
                             "textureAdoptFailed size=$surfaceSizeKey texture=$newTextureId " +
                                 "player=${System.identityHashCode(player)}",
                         )
                     } else {
+                        // Close old resources only after new ones are ready
+                        oldImage?.close()
+                        oldBackendTexture?.close()
                         textureId = newTextureId
                         player.currentSize = physicalSize
                         if (lastLoggedTextureSize != surfaceSizeKey) {
@@ -275,6 +307,8 @@ actual fun MpvMediampPlayerSurface(
                 // Texture creation failed — leave currentSize null so the next
                 // frame retries instead of getting stuck rendering nothing.
                 player.currentSize = null
+                oldImage?.close()
+                oldBackendTexture?.close()
                 logSurface(
                     "textureCreateFailed size=$surfaceSizeKey signature=$currentContextSignature " +
                         "player=${System.identityHashCode(player)}",
@@ -312,21 +346,23 @@ actual fun MpvMediampPlayerSurface(
                     lastLoggedReadPixels = stats
                 }
             }
-            val props = listOf(
-                "current-vo" to runCatching { player.impl.getPropertyString("current-vo") }.getOrDefault("<err>"),
-                "vid" to runCatching { player.impl.getPropertyString("vid") }.getOrDefault("<err>"),
-                "vo-configured" to runCatching { player.impl.getPropertyBoolean("vo-configured").toString() }.getOrDefault("<err>"),
-                "video-params/w" to runCatching { player.impl.getPropertyInt("video-params/w").toString() }.getOrDefault("<err>"),
-                "video-params/h" to runCatching { player.impl.getPropertyInt("video-params/h").toString() }.getOrDefault("<err>"),
-                "hwdec-current" to runCatching { player.impl.getPropertyString("hwdec-current") }.getOrDefault("<err>"),
-            ).joinToString(separator = " ") { (key, value) -> "$key=$value" }
-            val propsLogKey = "$surfaceSizeKey:$props"
-            if (lastLoggedMpvProps != propsLogKey) {
-                logSurface(
-                    "mpvProps size=$surfaceSizeKey texture=$textureId mode=${renderDebugMode.ifBlank { "normal" }} $props " +
-                        "player=${System.identityHashCode(player)}",
-                )
-                lastLoggedMpvProps = propsLogKey
+            if (renderDebugMode.isNotBlank()) {
+                val props = listOf(
+                    "current-vo" to runCatching { player.impl.getPropertyString("current-vo") }.getOrDefault("<err>"),
+                    "vid" to runCatching { player.impl.getPropertyString("vid") }.getOrDefault("<err>"),
+                    "vo-configured" to runCatching { player.impl.getPropertyBoolean("vo-configured").toString() }.getOrDefault("<err>"),
+                    "video-params/w" to runCatching { player.impl.getPropertyInt("video-params/w").toString() }.getOrDefault("<err>"),
+                    "video-params/h" to runCatching { player.impl.getPropertyInt("video-params/h").toString() }.getOrDefault("<err>"),
+                    "hwdec-current" to runCatching { player.impl.getPropertyString("hwdec-current") }.getOrDefault("<err>"),
+                ).joinToString(separator = " ") { (key, value) -> "$key=$value" }
+                val propsLogKey = "$surfaceSizeKey:$props"
+                if (lastLoggedMpvProps != propsLogKey) {
+                    logSurface(
+                        "mpvProps size=$surfaceSizeKey texture=$textureId mode=$renderDebugMode $props " +
+                            "player=${System.identityHashCode(player)}",
+                    )
+                    lastLoggedMpvProps = propsLogKey
+                }
             }
             runCatching { components.directContext.resetGLAll() }
         }

@@ -65,7 +65,27 @@ class OpenGLComponentProvider(private val skiaLayer: SkiaLayer) {
     // Skiko's display connection for glXMakeCurrent (instead of XOpenDisplay).
     val glDevice: Long get() = if (isLinux) x11Display else (deviceHandleField?.getLong(redrawer) ?: 0L)
     val glContext: Long get() = glContextHandleField.getLong(redrawer)
-    val contextSignature: String get() = "$glDevice:$glContext"
+    val glDrawable: Long get() {
+        if (!isLinux) return 0L
+        val backedLayer = skiaLayer.backedLayer ?: return 0L
+        return try {
+            val ktClass = Class.forName("org.jetbrains.skiko.AWTLinuxDrawingSurfaceKt")
+            val hwLayerClass = Class.forName("org.jetbrains.skiko.HardwareLayer")
+            val dsClass = Class.forName("org.jetbrains.skiko.LinuxDrawingSurface")
+            val lock = ktClass.getMethod("lockLinuxDrawingSurface", hwLayerClass)
+            val unlock = ktClass.getMethod("unlockLinuxDrawingSurface", dsClass)
+            val getWindow = dsClass.getMethod("getWindow")
+            val ds = lock.invoke(null, backedLayer)
+            try {
+                getWindow.invoke(ds) as Long
+            } finally {
+                unlock.invoke(null, ds)
+            }
+        } catch (_: Exception) {
+            0L
+        }
+    }
+    val contextSignature: String get() = "$glDevice:$glContext:$glDrawable"
     val contentScale: Float get() = skiaLayer.contentScale
     val currentDpi: Int get() = skiaLayer.currentDPI
 

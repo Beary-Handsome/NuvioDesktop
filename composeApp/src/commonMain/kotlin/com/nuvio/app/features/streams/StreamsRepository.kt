@@ -193,7 +193,29 @@ object StreamsRepository {
 
         log.d { "Found ${streamAddons.size} addons for stream type=$type id=$videoId" }
 
-        if (streamAddons.isEmpty() && pluginProviderGroups.isEmpty()) {
+        val effectiveAddons = if (streamAddons.isEmpty()) {
+            val extractedType = extractStandardTypeFromId(videoId)
+            if (extractedType != null && extractedType != type) {
+                log.d { "Retrying addon matching with extracted type=$extractedType from videoId" }
+                installedAddons.mapNotNull { addon ->
+                    val manifest = addon.manifest ?: return@mapNotNull null
+                    val supportsRequestedStream = manifest.resources.any { resource ->
+                        resource.name == "stream" &&
+                            resource.types.contains(extractedType) &&
+                            (resource.idPrefixes.isEmpty() ||
+                                resource.idPrefixes.any { videoId.startsWith(it) })
+                    }
+                    if (!supportsRequestedStream) return@mapNotNull null
+                    InstalledStreamAddonTarget(
+                        addonName = addon.displayTitle.ifBlank { manifest.name },
+                        addonId = addon.streamAddonInstanceId(manifest.id),
+                        manifest = manifest,
+                    )
+                }
+            } else streamAddons
+        } else streamAddons
+
+        if (effectiveAddons.isEmpty() && pluginProviderGroups.isEmpty()) {
             _uiState.value = StreamsUiState(
                 requestToken = requestToken,
                 isAnyLoading = false,
@@ -203,13 +225,13 @@ object StreamsRepository {
         }
 
         // Initialise loading placeholders
-        val installedAddonOrder = streamAddons.map { it.addonName }
+        val installedAddonOrder = effectiveAddons.map { it.addonName }
         val warmedAddonGroups = AddonStreamWarmupRepository
             .cachedGroups(type = type, videoId = videoId, season = season, episode = episode)
             .orEmpty()
             .associateBy { it.addonId }
         val warmedAddonIds = warmedAddonGroups.keys
-        val initialGroups = StreamAutoPlaySelector.orderAddonStreams(streamAddons.map { addon ->
+        val initialGroups = StreamAutoPlaySelector.orderAddonStreams(effectiveAddons.map { addon ->
             warmedAddonGroups[addon.addonId] ?: AddonStreamGroup(
                 addonName = addon.addonName,
                 addonId = addon.addonId,
@@ -236,7 +258,7 @@ object StreamsRepository {
         )
 
         activeJob = scope.launch {
-            val pendingStreamAddons = streamAddons.filterNot { it.addonId in warmedAddonIds }
+            val pendingStreamAddons = effectiveAddons.filterNot { it.addonId in warmedAddonIds }
             val completions = Channel<StreamLoadCompletion>(capacity = Channel.BUFFERED)
             val pluginRemainingByAddonId = pluginProviderGroups
                 .associate { it.addonId to it.scrapers.size }
@@ -846,4 +868,21 @@ private fun String.fallbackRepositoryLabel(): String {
     return host.ifBlank {
         withoutManifest.substringAfterLast('/').ifBlank { "Plugin repository" }
     }
+}
+
+private val STANDARD_CONTENT_TYPES = setOf(
+    "movie", "series", "channel", "tv", "folder", "playlist", "anime", "show", "episode",
+)
+
+internal fun extractStandardTypeFromId(id: String): String? {
+    val segments = id.split(":")
+    for (segment in segments) {
+        val lower = segment.lowercase().trim()
+        if (lower in STANDARD_CONTENT_TYPES) return lower
+    }
+    val lowerId = id.lowercase()
+    for (type in STANDARD_CONTENT_TYPES) {
+        if (lowerId.contains(type)) return type
+    }
+    return null
 }

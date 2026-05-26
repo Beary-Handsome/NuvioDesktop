@@ -12,7 +12,7 @@ package org.openani.mediamp.mpv
 import org.openani.mediamp.InternalMediampApi
 
 @InternalMediampApi
-external fun nCreateRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long): Boolean
+external fun nCreateRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long, drawablePtr: Long = 0L): Boolean
 
 @InternalMediampApi
 external fun nDestroyRenderContext(ptr: Long): Boolean
@@ -43,8 +43,8 @@ internal actual fun detachSurface(ptr: Long): Boolean {
 }
 
 @OptIn(InternalMediampApi::class)
-actual fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long): Boolean {
-    return nCreateRenderContext(ptr, devicePtr, contextPtr)
+actual fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long, drawablePtr: Long): Boolean {
+    return nCreateRenderContext(ptr, devicePtr, contextPtr, drawablePtr)
 }
 
 @OptIn(InternalMediampApi::class)

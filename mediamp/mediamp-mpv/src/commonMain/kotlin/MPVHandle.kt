@@ -147,7 +147,7 @@ private external fun nFinalize(ptr: Long)
 /**
  * Desktop only
  */
-internal expect fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long): Boolean
+internal expect fun createRenderContext(ptr: Long, devicePtr: Long, contextPtr: Long, drawablePtr: Long = 0L): Boolean
 
 /**
  * Desktop only

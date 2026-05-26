@@ -62,6 +62,10 @@ elseif(UNIX AND NOT APPLE)
         set(MPV_LIB_NAME "libmpv.so")
         set(MPV_LIB_EXTERNAL_AVCODEC_NAME "libavcodec.so")
         set(MPV_LIB_EXTERNAL_SWSCALE_NAME "libswscale.so")
+        set(MPV_LIB_EXTERNAL_AVFORMAT_NAME "libavformat.so")
+        set(MPV_LIB_EXTERNAL_AVUTIL_NAME "libavutil.so")
+        set(MPV_LIB_EXTERNAL_SWRESAMPLE_NAME "libswresample.so")
+        set(MPV_LIB_EXTERNAL_AVFILTER_NAME "libavfilter.so")
     else()
         message(FATAL_ERROR "only support x86_64 on Linux")
     endif()
@@ -126,6 +130,10 @@ else()
                 opengl32)
     elseif(UNIX AND NOT APPLE)
         target_link_libraries(${PROJECT_NAME} PRIVATE
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVFORMAT_NAME}"
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVUTIL_NAME}"
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_SWRESAMPLE_NAME}"
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVFILTER_NAME}"
                 EGL GL dl)
     endif()
 endif()

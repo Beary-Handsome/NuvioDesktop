@@ -247,8 +247,13 @@ bool mpv_handle_t::detach_window_surface() {
 }
 #endif
 
+static void mpv_render_update_callback(void* ctx) {
+    mpv_handle* mpv = static_cast<mpv_handle*>(ctx);
+    if (mpv) mpv_wakeup(mpv);
+}
+
 #if defined(_WIN32) || defined(__linux__)
-bool mpv_handle_t::create_render_context(uintptr_t device_ptr, uintptr_t context_ptr) {
+bool mpv_handle_t::create_render_context(uintptr_t device_ptr, uintptr_t context_ptr, uintptr_t drawable_ptr) {
 FP;
 CHECK_HANDLE()
 
@@ -292,112 +297,143 @@ wglMakeCurrent(old_dc, old_ctx);
 return false;
 }
 
+mpv_render_context_set_update_callback(render_context_, mpv_render_update_callback, static_cast<void*>(handle_));
+
 wglMakeCurrent(old_dc, old_ctx);
 
 #elif defined(__linux__)
-	// Detect Wayland vs X11 at runtime
-	const char* wayland_env = std::getenv("WAYLAND_DISPLAY");
-	bool is_wayland = wayland_env && wayland_env[0] != '\0';
+	// Use Skiko's X11 Display presence (glDevice) to decide the rendering path.
+	// On Wayland with XWayland, WAYLAND_DISPLAY is set but Skiko still provides
+	// a valid X11 Display* and GLX context — use the X11/GLX path there.
+	// Only take the EGL/Wayland path when no X11 Display is available
+	// (native Wayland without XWayland, or Skiko provides 0 for glDevice).
+	if (device_ptr != 0) {
+		// ---- X11 / XWayland: Try EGL first (hwdec interop), fall back to GLX ----
+		// We prefer EGL because hardware-accelerated video decoding (VA-API
+		// on Intel/AMD, NVDEC on NVIDIA) needs EGL for zero-copy interop with
+		// OpenGL.  GLX can only do copy-back decoding (vaapi-copy, nvdec-copy).
+		//
+		// NVIDIA's EGL driver has a known bug on Wayland: calling EGL functions
+		// when WAYLAND_DISPLAY is set and libnvidia-egl-wayland.so is loaded
+		// crashes with SIGSEGV in pthread_mutex_lock.  We dlopen the library
+		// with RTLD_NOLOAD to check if it is already present; if so, we skip EGL.
+		{
+			// Check if any NVIDIA EGL-Wayland library is already loaded.
+			// On this system the soname is libnvidia-egl-wayland.so.1 or
+			// libnvidia-egl-wayland2.so; try both.
+			bool nvidia_wl_loaded = false;
+			void* nvidia_wl = dlopen("libnvidia-egl-wayland.so.1", RTLD_LAZY | RTLD_NOLOAD);
+			if (nvidia_wl) { nvidia_wl_loaded = true; dlclose(nvidia_wl); }
+			if (!nvidia_wl_loaded) {
+				nvidia_wl = dlopen("libnvidia-egl-wayland2.so", RTLD_LAZY | RTLD_NOLOAD);
+				if (nvidia_wl) { nvidia_wl_loaded = true; dlclose(nvidia_wl); }
+			}
+			if (!nvidia_wl_loaded) {
+				nvidia_wl = dlopen("libnvidia-egl-wayland.so", RTLD_LAZY | RTLD_NOLOAD);
+				if (nvidia_wl) { nvidia_wl_loaded = true; dlclose(nvidia_wl); }
+			}
 
-	if (is_wayland) {
-		// ---- Wayland / EGL path ----
-		using_egl_ = true;
-		glx_display_ = nullptr;
-		glx_drawable_ = None;
-		egl_display_ = EGL_NO_DISPLAY;
-		egl_pbuffer_surface_ = EGL_NO_SURFACE;
+			if (!nvidia_wl_loaded) {
+				Display* egl_dpy = reinterpret_cast<Display*>(device_ptr);
+				if (egl_dpy) {
+					// Save old GLX state so we can restore after EGL attempt
+					Display* old_dpy = glXGetCurrentDisplay();
+					GLXDrawable old_drawable = glXGetCurrentDrawable();
+					GLXContext old_ctx = glXGetCurrentContext();
 
-		// Prefer eglGetCurrentDisplay() (called from within Canvas callback).
-		// Fall back to eglGetDisplay() with the native wl_display* from Skiko.
-		egl_display_ = eglGetCurrentDisplay();
-		if (egl_display_ == EGL_NO_DISPLAY) {
-			egl_display_ = eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(device_ptr));
+					// Temporarily unset WAYLAND_DISPLAY to force X11 EGL platform.
+					const char* saved_wayland = getenv("WAYLAND_DISPLAY");
+					bool had_wayland = saved_wayland && saved_wayland[0];
+					if (had_wayland) unsetenv("WAYLAND_DISPLAY");
+
+					EGLDisplay egl_display = EGL_NO_DISPLAY;
+
+					// Use eglGetPlatformDisplay with explicit X11 platform (EGL 1.5)
+					// to completely bypass Wayland auto-detection.
+					typedef EGLDisplay (EGLAPIENTRYP PFNEGLGETPLATFORMDISPLAYPROC)(EGLenum, void*, const EGLAttrib*);
+#ifndef EGL_PLATFORM_X11_KHR
+#define EGL_PLATFORM_X11_KHR 0x31D5
+#endif
+					PFNEGLGETPLATFORMDISPLAYPROC pf_eglGetPlatformDisplay =
+						(PFNEGLGETPLATFORMDISPLAYPROC)eglGetProcAddress("eglGetPlatformDisplay");
+					if (pf_eglGetPlatformDisplay) {
+						egl_display = pf_eglGetPlatformDisplay(EGL_PLATFORM_X11_KHR, (void*)egl_dpy, nullptr);
+					}
+					if (egl_display == EGL_NO_DISPLAY) {
+						egl_display = eglGetDisplay((EGLNativeDisplayType)egl_dpy);
+					}
+
+					if (egl_display != EGL_NO_DISPLAY) {
+						EGLint major, minor;
+						if (eglInitialize(egl_display, &major, &minor)) {
+							EGLint config_attribs[] = {
+								EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+								EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+								EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
+								EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+								EGL_DEPTH_SIZE, 24, EGL_NONE
+							};
+							EGLint config_count;
+							EGLConfig config;
+							if (eglChooseConfig(egl_display, config_attribs, &config, 1, &config_count) && config_count > 0) {
+								EGLint pb_attribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+								EGLSurface pbuffer = eglCreatePbufferSurface(egl_display, config, pb_attribs);
+								if (pbuffer != EGL_NO_SURFACE) {
+									EGLContext egl_ctx = eglCreateContext(egl_display, config, EGL_NO_CONTEXT, nullptr);
+									if (egl_ctx != EGL_NO_CONTEXT) {
+										if (eglMakeCurrent(egl_display, pbuffer, pbuffer, egl_ctx)) {
+											if (load_gl_functions()) {
+												mpv_opengl_init_params gl_init_params{
+													.get_proc_address = get_proc_address_mpv,
+													.get_proc_address_ctx = nullptr
+												};
+												mpv_render_param params[] = {
+													{MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
+													{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+													{MPV_RENDER_PARAM_INVALID, nullptr},
+												};
+
+												mpv_render_context* render_ctx = nullptr;
+												if (mpv_render_context_create(&render_ctx, handle_, params) >= 0) {
+													mpv_render_context_set_update_callback(render_ctx, mpv_render_update_callback, static_cast<void*>(handle_));
+
+													using_egl_ = true;
+													egl_display_ = egl_display;
+													egl_pbuffer_surface_ = pbuffer;
+													context_ = reinterpret_cast<uintptr_t>(egl_ctx);
+													glx_display_ = nullptr;
+													glx_drawable_ = None;
+													render_context_ = render_ctx;
+
+													if (had_wayland) setenv("WAYLAND_DISPLAY", saved_wayland, 1);
+													if (old_ctx) glXMakeCurrent(old_dpy, old_drawable, old_ctx);
+
+													LOG("EGL: render context created (v%d.%d)", major, minor);
+													return true;
+												}
+											}
+											eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+										}
+										eglDestroyContext(egl_display, egl_ctx);
+									}
+									eglDestroySurface(egl_display, pbuffer);
+								}
+							}
+							eglTerminate(egl_display);
+						}
+					}
+
+					if (had_wayland) setenv("WAYLAND_DISPLAY", saved_wayland, 1);
+					if (old_ctx) glXMakeCurrent(old_dpy, old_drawable, old_ctx);
+				}
+			}
 		}
-		if (egl_display_ == EGL_NO_DISPLAY) {
-			LOG("EGL: no display available");
-			return false;
-		}
 
-		EGLContext egl_ctx = reinterpret_cast<EGLContext>(context_ptr);
-		if (!egl_ctx) {
-			LOG("EGL: null EGLContext");
-			return false;
-		}
-
-		EGLint major, minor;
-		if (!eglInitialize(egl_display_, &major, &minor)) {
-			LOG("EGL: eglInitialize failed (ver=%d.%d)", major, minor);
-			return false;
-		}
-
-		EGLint configAttribs[] = {
-			EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-			EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-			EGL_RED_SIZE, 8,
-			EGL_GREEN_SIZE, 8,
-			EGL_BLUE_SIZE, 8,
-			EGL_ALPHA_SIZE, 8,
-			EGL_NONE
-		};
-		EGLint configCount;
-		EGLConfig egl_config;
-		if (!eglChooseConfig(egl_display_, configAttribs, &egl_config, 1, &configCount) || configCount < 1) {
-			LOG("EGL: no suitable config");
-			return false;
-		}
-
-		EGLint pbAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
-		egl_pbuffer_surface_ = eglCreatePbufferSurface(egl_display_, egl_config, pbAttribs);
-		if (egl_pbuffer_surface_ == EGL_NO_SURFACE) {
-			LOG("EGL: pbuffer creation failed");
-			return false;
-		}
-
-		if (!eglMakeCurrent(egl_display_, egl_pbuffer_surface_, egl_pbuffer_surface_, egl_ctx)) {
-			LOG("EGL: eglMakeCurrent failed");
-			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-			egl_pbuffer_surface_ = EGL_NO_SURFACE;
-			return false;
-		}
-		LOG("EGL: context made current to pbuffer, display=%p ctx=%p", (void*)egl_display_, (void*)egl_ctx);
-
-		if (!load_gl_functions()) {
-			LOG("EGL: failed to load OpenGL functions");
-			eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-			egl_pbuffer_surface_ = EGL_NO_SURFACE;
-			return false;
-		}
-
-		mpv_opengl_init_params gl_init_params{
-			.get_proc_address = get_proc_address_mpv,
-			.get_proc_address_ctx = nullptr
-		};
-		mpv_render_param params[] = {
-			{MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
-			{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
-			{MPV_RENDER_PARAM_INVALID, nullptr},
-		};
-
-		if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
-			render_context_ = nullptr;
-			LOG("EGL: mpv_render_context_create failed");
-			eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
-			egl_pbuffer_surface_ = EGL_NO_SURFACE;
-			return false;
-		}
-		LOG("EGL: mpv_render_context_create succeeded");
-
-	} else {
-		// ---- X11 / GLX path ----
+		// ---- GLX fallback path ----
 		using_egl_ = false;
 		egl_display_ = EGL_NO_DISPLAY;
 		egl_pbuffer_surface_ = EGL_NO_SURFACE;
 
-		// device_ptr is Skiko's X11 Display* (passed from Kotlin via glDevice).
-		// We MUST use Skiko's display connection because GLX contexts are tied
-		// to the Display* that created them.
 		Display* dpy = reinterpret_cast<Display*>(device_ptr);
 		if (!dpy) {
 			LOG("GLX: no X11 display (device_ptr=0)");
@@ -407,6 +443,14 @@ wglMakeCurrent(old_dc, old_ctx);
 		glx_display_ = dpy;
 		owns_glx_display_ = false;
 		auto glx_ctx = reinterpret_cast<GLXContext>(context_ptr);
+		glx_context_ = glx_ctx;
+		owns_glx_context_ = false;
+
+		// If Skiko uses EGL (not GLX), glXMakeCurrent below will fail and we
+		// fall through to the EGL path which handles both cases (context
+		// current on thread, or handles provided from Kotlin).
+
+		GLXDrawable skiko_drawable = static_cast<GLXDrawable>(drawable_ptr);
 
 		LOG("GLX: creating pbuffer on Skiko display=%p ctx=%p", (void*)dpy, (void*)glx_ctx);
 		int fbAttribs[] = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_DOUBLEBUFFER, False, None};
@@ -419,6 +463,8 @@ wglMakeCurrent(old_dc, old_ctx);
 
 		int pbAttribs[] = {GLX_PBUFFER_WIDTH, 1, GLX_PBUFFER_HEIGHT, 1, None};
 		GLXDrawable drawable = glXCreatePbuffer(dpy, fbc[0], pbAttribs);
+		// Save fbconfig before freeing — may need it for our own GLX context
+		GLXFBConfig fbconfig = fbc[0];
 		XFree(fbc);
 
 		if (drawable == None) {
@@ -429,19 +475,38 @@ wglMakeCurrent(old_dc, old_ctx);
 		glx_drawable_ = drawable;
 		owns_glx_drawable_ = true;
 
+		// Save Skiko's current drawable/context before switching to pbuffer
+		Display* old_dpy = glXGetCurrentDisplay();
+		GLXDrawable old_drawable = glXGetCurrentDrawable();
+		GLXContext old_glx_ctx = glXGetCurrentContext();
+
 		LOG("GLX: glXMakeCurrent(dpy=%p, drawable=%lu, ctx=%p)", (void*)dpy, (unsigned long)drawable, (void*)glx_ctx);
 		if (!glXMakeCurrent(dpy, drawable, glx_ctx)) {
-			LOG("GLX: glXMakeCurrent failed");
-			glXDestroyPbuffer(dpy, drawable);
-			glx_drawable_ = None;
-			owns_glx_drawable_ = false;
-			return false;
+			LOG("GLX: glXMakeCurrent failed with Skiko's context, trying our own");
+			GLXContext our_ctx = glXCreateNewContext(dpy, fbconfig, GLX_RGBA_TYPE, None, True);
+			if (!our_ctx || !glXMakeCurrent(dpy, drawable, our_ctx)) {
+				LOG("GLX: own context also failed");
+				if (our_ctx) glXDestroyContext(dpy, our_ctx);
+				glXDestroyPbuffer(dpy, drawable);
+				glx_drawable_ = None;
+				owns_glx_drawable_ = false;
+				if (old_dpy && old_glx_ctx) glXMakeCurrent(old_dpy, old_drawable, old_glx_ctx);
+				return false;
+			}
+			LOG("GLX: glXMakeCurrent succeeded with our own context");
+			glx_ctx = our_ctx;
+			glx_context_ = our_ctx;
+			owns_glx_context_ = true;
 		}
 		LOG("GLX: glXMakeCurrent succeeded");
 
 		if (!load_gl_functions()) {
 			LOG("Failed to load OpenGL functions");
-			glXMakeCurrent(dpy, None, nullptr);
+			// Restore Skiko's context before cleanup
+			if (old_dpy && old_glx_ctx) glXMakeCurrent(old_dpy, old_drawable, old_glx_ctx);
+			if (owns_glx_context_ && glx_context_) glXDestroyContext(dpy, glx_context_);
+			glx_context_ = nullptr;
+			owns_glx_context_ = false;
 			glXDestroyPbuffer(dpy, drawable);
 			glx_drawable_ = None;
 			owns_glx_drawable_ = false;
@@ -461,13 +526,123 @@ wglMakeCurrent(old_dc, old_ctx);
 		if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
 			render_context_ = nullptr;
 			LOG("GLX: mpv_render_context_create failed");
-			glXMakeCurrent(dpy, None, nullptr);
+			// Restore Skiko's context before cleanup
+			if (old_dpy && old_glx_ctx) glXMakeCurrent(old_dpy, old_drawable, old_glx_ctx);
+			if (owns_glx_context_ && glx_context_) glXDestroyContext(dpy, glx_context_);
+			glx_context_ = nullptr;
+			owns_glx_context_ = false;
 			glXDestroyPbuffer(dpy, drawable);
 			glx_drawable_ = None;
 			owns_glx_drawable_ = false;
 			return false;
 		}
+
+		mpv_render_context_set_update_callback(render_context_, mpv_render_update_callback, static_cast<void*>(handle_));
 		LOG("GLX: mpv_render_context_create succeeded");
+
+		// Restore Skiko's original drawable/context so Skiko can continue rendering
+		if (old_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_dpy, old_drawable, old_glx_ctx);
+		}
+
+	} else {
+		// ---- EGL path (device_ptr == 0) ----
+		// Used for both:
+		//   - Native Wayland (device_ptr == 0): context must be current to
+		//     avoid NVIDIA EGL-Wayland crash.
+		//   - X11 / XWayland when Skiko uses EGL (device_ptr != 0, context_ptr
+		//     is EGLContext, not GLXContext): use handles from Kotlin directly.
+		using_egl_ = true;
+		glx_display_ = nullptr;
+		glx_drawable_ = None;
+		egl_display_ = EGL_NO_DISPLAY;
+		egl_pbuffer_surface_ = EGL_NO_SURFACE;
+
+		EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+		EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+		EGLSurface old_egl_draw = EGL_NO_SURFACE;
+		EGLSurface old_egl_read = EGL_NO_SURFACE;
+		EGLContext egl_ctx = EGL_NO_CONTEXT;
+		bool got_context_from_current = false;
+
+		// ---- Step 1: Obtain EGLDisplay and EGLContext ----
+		EGLContext current_ctx = eglGetCurrentContext();
+		if (current_ctx != EGL_NO_CONTEXT) {
+			// Context is current on this thread (e.g. inside Canvas callback).
+			// Save Skiko's state so we can restore it later.
+			LOG("EGL: context current, proceeding …");
+			got_context_from_current = true;
+			old_egl_display = eglGetCurrentDisplay();
+			old_egl_ctx = eglGetCurrentContext();
+			old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+			old_egl_read = eglGetCurrentSurface(EGL_READ);
+
+			egl_display_ = old_egl_display;
+			egl_ctx = current_ctx;
+		} else if (device_ptr != 0) {
+			// Should not reach here — the GLX path above tried to create its
+			// own GLX context and failed.  Creating our own EGL context on
+			// NVIDIA+Wayland crashes the EGL driver (SIGSEGV in
+			// pthread_mutex_lock), so bail.
+			LOG("EGL: no context current, device_ptr available, but GLX already failed — aborting");
+			return false;
+		} else {
+			// On Wayland with NVIDIA's proprietary driver, calling any EGL
+			// function from a thread where Skiko has no current context (e.g.,
+			// DisposableEffect, before the first Canvas frame) crashes with a
+			// SIGSEGV in pthread_mutex_lock deep inside libnvidia-egl-wayland.
+			// Bail early — the Canvas callback will retry with a current context.
+			LOG("EGL: no context current and no display handle — will retry later");
+			return false;
+		}
+
+		// Helper to restore/destroy EGL state after init (success or failure).
+		// Must be called AFTER mpv_render_context_create attempt.
+		auto egl_finalize = [&]() {
+			if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+				// Restore Skiko's EGL context (saved at entry)
+				eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+			} else if (egl_ctx != EGL_NO_CONTEXT && !got_context_from_current) {
+				// We created our own context — unbind it to avoid interfering with Skiko.
+				eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+			}
+			if (egl_pbuffer_surface_ != EGL_NO_SURFACE) {
+				eglDestroySurface(egl_display_, egl_pbuffer_surface_);
+				egl_pbuffer_surface_ = EGL_NO_SURFACE;
+			}
+			if (!got_context_from_current && egl_ctx != EGL_NO_CONTEXT) {
+				eglDestroyContext(egl_display_, egl_ctx);
+				egl_ctx = EGL_NO_CONTEXT;
+			}
+		};
+
+		LOG("EGL: loading OpenGL functions …");
+		if (!load_gl_functions()) {
+			LOG("EGL: failed to load OpenGL functions");
+			egl_finalize();
+			return false;
+		}
+		{
+			mpv_opengl_init_params gl_init_params{
+				.get_proc_address = get_proc_address_mpv,
+				.get_proc_address_ctx = nullptr
+			};
+			mpv_render_param params[] = {
+				{MPV_RENDER_PARAM_API_TYPE, const_cast<char *>(MPV_RENDER_API_TYPE_OPENGL)},
+				{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init_params},
+				{MPV_RENDER_PARAM_INVALID, nullptr},
+			};
+
+			if (mpv_render_context_create(&render_context_, handle_, params) < 0) {
+				render_context_ = nullptr;
+				LOG("EGL: mpv_render_context_create failed");
+				egl_finalize();
+				return false;
+			}
+		}
+		mpv_render_context_set_update_callback(render_context_, mpv_render_update_callback, static_cast<void*>(handle_));
+		LOG("EGL: mpv_render_context_create succeeded");
+		egl_finalize();
 	}
 
 #endif
@@ -511,10 +686,25 @@ return false;
 	HGLRC old_ctx = wglGetCurrentContext();
 	wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 #elif defined(__linux__)
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
 	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
 		eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
 	} else {
-		glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		glXMakeCurrent(glx_display_, glx_drawable_, glx_context_);
 	}
 #endif
 
@@ -528,11 +718,24 @@ return false;
 			eglDestroySurface(egl_display_, egl_pbuffer_surface_);
 			egl_pbuffer_surface_ = EGL_NO_SURFACE;
 		}
-		eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+		// Restore Skiko's EGL context instead of releasing to None
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		} else {
+			eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+		}
 	} else {
+		// Restore Skiko's GLX context before destroying our pbuffer
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
 		if (glx_display_) {
-			glXMakeCurrent(glx_display_, None, nullptr);
 			if (owns_glx_drawable_ && glx_drawable_ != None) glXDestroyPbuffer(glx_display_, glx_drawable_);
+			if (owns_glx_context_ && glx_context_) {
+				glXDestroyContext(glx_display_, glx_context_);
+				glx_context_ = nullptr;
+				owns_glx_context_ = false;
+			}
 			if (owns_glx_display_) XCloseDisplay(glx_display_);
 			glx_display_ = nullptr;
 			glx_drawable_ = None;
@@ -557,11 +760,32 @@ LOG("Failed to make OpenGL context current in create_texture");
 return 0;
 }
 #elif defined(__linux__)
-if (using_egl_ ? !eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
-: !glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_))) {
-LOG("Failed to make context current in create_texture");
-return 0;
-}
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
+	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
+		if (!eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+			LOG("Failed to make EGL context current in create_texture\n");
+			return 0;
+		}
+	} else {
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		if (!glXMakeCurrent(glx_display_, glx_drawable_, glx_context_)) {
+			LOG("Failed to make GLX context current in create_texture\n");
+			return 0;
+		}
+	}
 #endif
 
 GLuint old_texture = texture_;
@@ -570,25 +794,43 @@ GLuint new_texture = GL_ZERO;
 GLuint new_fbo = GL_ZERO;
 
 glGenTextures(1, &new_texture);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glGenTextures err=0x%x\n", e); }
 glBindTexture(GL_TEXTURE_2D, new_texture);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glBindTexture err=0x%x\n", e); }
 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glTexImage2D err=0x%x\n", e); }
 
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glTexParameteri err=0x%x\n", e); }
 
 pfnGlGenFramebuffers(1, &new_fbo);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glGenFramebuffers err=0x%x\n", e); }
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, new_fbo);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glBindFramebuffer err=0x%x\n", e); }
 pfnGlFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
 GL_TEXTURE_2D, new_texture, 0);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glFramebufferTexture2D err=0x%x\n", e); }
 
-GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
-if (status != GL_FRAMEBUFFER_COMPLETE) {
+			GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
+			if (status != GL_FRAMEBUFFER_COMPLETE) {
+				LOG("[GL] create_texture fbo_status=0x%x\n", status);
 LOG("Framebuffer not complete in create_texture: 0x%x", status);
 release_texture_impl(&new_texture, &new_fbo);
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 return 0;
 }
@@ -606,6 +848,16 @@ release_texture_impl(&old_texture, &old_fbo);
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 
 return texture_;
@@ -624,17 +876,42 @@ HDC old_dc = wglGetCurrentDC();
 HGLRC old_ctx = wglGetCurrentContext();
 wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_));
 #elif defined(__linux__)
-if (using_egl_) {
-eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
-} else {
-glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
-}
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
+	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
+		eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_));
+	} else {
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		glXMakeCurrent(glx_display_, glx_drawable_, glx_context_);
+	}
 #endif
 
 bool released = release_texture_impl(&texture_, &fbo_);
 
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 
 return released;
@@ -647,7 +924,9 @@ GLuint textures_to_delete[1] = { *texture_id };
 GLuint framebuffer_to_delete[1] = { *framebuffer_object };
 
 glDeleteTextures(1, textures_to_delete);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glDeleteTextures err=0x%x\n", e); }
 pfnGlDeleteFramebuffers(1, framebuffer_to_delete);
+{ GLenum e = glGetError(); if (e) LOG("[GL] glDeleteFramebuffers err=0x%x\n", e); }
 
 *texture_id = GL_ZERO;
 *framebuffer_object = GL_ZERO;
@@ -674,22 +953,52 @@ LOG("Failed to make OpenGL context current in render_frame");
 return false;
 }
 #elif defined(__linux__)
-bool ctx_ok = using_egl_
-? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
-: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
-if (!ctx_ok) {
-LOG("Failed to make context current in render_frame");
-return false;
-}
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
+	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
+		if (!eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+			LOG("Failed to make EGL context current in render_frame\n");
+			return false;
+		}
+	} else {
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		if (!glXMakeCurrent(glx_display_, glx_drawable_, glx_context_)) {
+			LOG("Failed to make GLX context current in render_frame\n");
+			return false;
+		}
+	}
 #endif
 
-// 绑定 FBO 并检查状态
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
-if (status != GL_FRAMEBUFFER_COMPLETE) {
-LOG("Framebuffer not complete: 0x%x", status);
+{ GLenum e = glGetError(); if (e) LOG("[GL] render_frame glBindFramebuffer err=0x%x\n", e); }
+		GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if (status != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("[GL] render_frame fbo_status=0x%x\n", status);
+LOG("[GL] Framebuffer not complete in render_frame: 0x%x", status);
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 return false;
 }
@@ -697,8 +1006,10 @@ return false;
 // On resize, viewport can stay stale from previous dimensions on some drivers.
 // Always force it to current render target size before asking mpv to render.
 glViewport(0, 0, width_, height_);
+{ GLenum e = glGetError(); if (e) LOG("[GL] render_frame glViewport err=0x%x\n", e); }
 glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 glClear(GL_COLOR_BUFFER_BIT);
+{ GLenum e = glGetError(); if (e) LOG("[GL] render_frame glClear err=0x%x\n", e); }
 
 mpv_opengl_fbo fbo_params{
 static_cast<int>(fbo_), width_, height_, GL_RGBA8
@@ -713,17 +1024,30 @@ MPV_RENDER_PARAM_INVALID, nullptr
 };
 
 // 无论是否有新帧，都调用 render（mpv 文档建议）
-int render_result = mpv_render_context_render(render_context_, params);
-if (render_result < 0) {
-LOG("mpv_render_context_render failed: %d", render_result);
-}
+	int render_result = mpv_render_context_render(render_context_, params);
+	if (render_result < 0) {
+		LOG("mpv_render_context_render failed: %d", render_result);
+	}
+	{ GLenum e = glGetError(); if (e) LOG("[GL] mpv_render_context_render err=0x%x\n", e); }
 
-// 解绑 FBO
-pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// 解绑 FBO
+	pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
+	{ GLenum e = glGetError(); if (e) LOG("[GL] render_frame unbind FBO err=0x%x\n", e); }
 
-glFinish();
+	glFinish();
+	{ GLenum e = glGetError(); if (e) LOG("[GL] glFinish err=0x%x\n", e); }
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 
 return render_result >= 0;
@@ -749,21 +1073,52 @@ LOG("Failed to make OpenGL context current in debug_render_solid");
 return false;
 }
 #elif defined(__linux__)
-bool ctx_ok = using_egl_
-? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
-: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
-if (!ctx_ok) {
-LOG("Failed to make context current in debug_render_solid");
-return false;
-}
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
+	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
+		if (!eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+			LOG("Failed to make EGL context current in debug_render_solid\n");
+			return false;
+		}
+	} else {
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		if (!glXMakeCurrent(glx_display_, glx_drawable_, glx_context_)) {
+			LOG("Failed to make GLX context current in debug_render_solid\n");
+			return false;
+		}
+	}
 #endif
 
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
-if (status != GL_FRAMEBUFFER_COMPLETE) {
-LOG("Framebuffer not complete in debug_render_solid: 0x%x", status);
+{ GLenum e = glGetError(); if (e) LOG("[GL] debug_render_solid glBindFramebuffer err=0x%x\n", e); }
+		GLenum status = pfnGlCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if (status != GL_FRAMEBUFFER_COMPLETE) {
+			LOG("[GL] debug_render_solid fbo_status=0x%x\n", status);
+LOG("[GL] Framebuffer not complete in debug_render_solid: 0x%x", status);
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 return false;
 }
@@ -771,10 +1126,22 @@ return false;
 glViewport(0, 0, width_, height_);
 glClearColor(red, green, blue, alpha);
 glClear(GL_COLOR_BUFFER_BIT);
+{ GLenum e = glGetError(); if (e) LOG("[GL] debug_render_solid glClear err=0x%x\n", e); }
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 glFinish();
+{ GLenum e = glGetError(); if (e) LOG("[GL] glFinish err=0x%x\n", e); }
 #ifdef _WIN32
 wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 
 return true;
@@ -798,12 +1165,30 @@ if (!wglMakeCurrent(device_, reinterpret_cast<HGLRC>(context_))) {
 return "wglMakeCurrent=false";
 }
 #elif defined(__linux__)
-bool ctx_ok = using_egl_
-? eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))
-: glXMakeCurrent(glx_display_, glx_drawable_, reinterpret_cast<GLXContext>(context_));
-if (!ctx_ok) {
-return using_egl_ ? "eglMakeCurrent=false" : "glXMakeCurrent=false";
-}
+	Display* old_glx_dpy = nullptr;
+	GLXDrawable old_glx_drawable = None;
+	GLXContext old_glx_ctx = nullptr;
+	EGLDisplay old_egl_display = EGL_NO_DISPLAY;
+	EGLContext old_egl_ctx = EGL_NO_CONTEXT;
+	EGLSurface old_egl_draw = EGL_NO_SURFACE;
+	EGLSurface old_egl_read = EGL_NO_SURFACE;
+
+	if (using_egl_) {
+		old_egl_display = eglGetCurrentDisplay();
+		old_egl_ctx = eglGetCurrentContext();
+		old_egl_draw = eglGetCurrentSurface(EGL_DRAW);
+		old_egl_read = eglGetCurrentSurface(EGL_READ);
+		if (!eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, reinterpret_cast<EGLContext>(context_))) {
+			return "eglMakeCurrent=false";
+		}
+	} else {
+		old_glx_dpy = glXGetCurrentDisplay();
+		old_glx_drawable = glXGetCurrentDrawable();
+		old_glx_ctx = glXGetCurrentContext();
+		if (!glXMakeCurrent(glx_display_, glx_drawable_, glx_context_)) {
+			return "glXMakeCurrent=false";
+		}
+	}
 #endif
 
 pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
@@ -813,6 +1198,16 @@ pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 		failed << "fboStatus=0x" << std::hex << status;
 #ifdef _WIN32
 		wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+		if (using_egl_) {
+			if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+				eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+			}
+		} else {
+			if (old_glx_dpy && old_glx_ctx) {
+				glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+			}
+		}
 #endif
 		return failed.str();
 	}
@@ -841,6 +1236,16 @@ pfnGlBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 	pfnGlBindFramebuffer(GL_FRAMEBUFFER, 0);
 #ifdef _WIN32
 	wglMakeCurrent(old_dc, old_ctx);
+#elif defined(__linux__)
+	if (using_egl_) {
+		if (old_egl_display != EGL_NO_DISPLAY && old_egl_ctx != EGL_NO_CONTEXT) {
+			eglMakeCurrent(old_egl_display, old_egl_draw, old_egl_read, old_egl_ctx);
+		}
+	} else {
+		if (old_glx_dpy && old_glx_ctx) {
+			glXMakeCurrent(old_glx_dpy, old_glx_drawable, old_glx_ctx);
+		}
+	}
 #endif
 
 int count = sample_width * sample_height;
