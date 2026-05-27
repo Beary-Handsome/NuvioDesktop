@@ -41,6 +41,7 @@
 -dontwarn dev.chrisbanes.haze.**
 -dontwarn com.google.common.truth.**
 -dontwarn org.objectweb.asm.**
+-dontwarn com.sun.jna.**
 
 # OkHttp ships optional integrations for Android, Conscrypt, BouncyCastle and
 # OpenJSSE that are runtime-probed via reflection. None of them are present on

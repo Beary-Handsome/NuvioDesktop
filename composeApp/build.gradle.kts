@@ -712,6 +712,7 @@ compose.desktop {
             when {
                 hostOs.contains("windows") -> targetFormats(TargetFormat.Exe, TargetFormat.Msi)
                 hostOs.contains("mac") -> targetFormats(TargetFormat.Dmg)
+                hostOs.contains("linux") -> targetFormats(TargetFormat.Deb, TargetFormat.AppImage)
             }
 
             windows {
