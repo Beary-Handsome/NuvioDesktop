@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import kotlinx.coroutines.delay
@@ -372,10 +373,11 @@ private fun ProfileAvatarCard(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (avatarImageUrl != null) {
-                    AsyncImage(
-                        model = avatarImageUrl,
-                        contentDescription = avatarItem?.displayName ?: profile.name,
+            if (avatarImageUrl != null) {
+                AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
+                    model = avatarImageUrl,
+                    contentDescription = avatarItem?.displayName ?: profile.name,
                         modifier = Modifier.size(100.dp).clip(CircleShape),
                         contentScale = ContentScale.Crop,
                     )

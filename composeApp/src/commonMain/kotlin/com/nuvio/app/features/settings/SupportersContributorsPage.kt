@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSurfaceCard
@@ -788,6 +789,7 @@ private fun CommunityAvatar(
             )
         } else {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = imageUrl,
                 contentDescription = label,
                 modifier = Modifier.fillMaxSize(),

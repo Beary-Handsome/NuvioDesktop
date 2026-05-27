@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.details.MetaDetails
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -57,10 +58,11 @@ fun DetailHero(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 val imageUrl = meta.background ?: meta.poster
-                if (imageUrl != null) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = meta.name,
+            if (imageUrl != null) {
+                AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
+                    model = imageUrl,
+                    contentDescription = meta.name,
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
@@ -105,6 +107,7 @@ fun DetailHero(
                 ) {
                     if (meta.logo != null) {
                         AsyncImage(
+                            filterQuality = NuvioImageFilterQuality,
                             model = meta.logo,
                             contentDescription = stringResource(Res.string.detail_logo_content_description, meta.name),
                             modifier = Modifier

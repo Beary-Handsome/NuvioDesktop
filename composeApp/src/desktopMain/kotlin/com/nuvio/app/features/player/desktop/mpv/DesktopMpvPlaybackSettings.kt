@@ -290,7 +290,12 @@ internal fun loadHardwareDecoderMode(): PlayerHardwareDecoderMode {
     val storedValue = DesktopPreferences.getString(DesktopDecoderPreferencesName, DesktopHwdecModeKey)
     return storedValue?.enumValueOrNull<PlayerHardwareDecoderMode>()
         ?: storedValue?.legacyHwdecValue()?.enumValueOrNull<PlayerHardwareDecoderMode>()
-        ?: PlayerHardwareDecoderMode.Auto
+        ?: defaultHardwareDecoderMode()
+}
+
+private fun defaultHardwareDecoderMode(): PlayerHardwareDecoderMode {
+    val osName = System.getProperty("os.name").lowercase()
+    return if (osName.startsWith("linux")) PlayerHardwareDecoderMode.Off else PlayerHardwareDecoderMode.Auto
 }
 
 private inline fun <reified T : Enum<T>> loadEnum(key: String, default: T): T =

@@ -81,6 +81,7 @@ data class PlayerSettingsUiState(
     val iosContrast: Int = 0,
     val iosSaturation: Int = 0,
     val iosGamma: Int = 0,
+    val playerBackend: PlayerBackendOption = PlayerBackendOption.AUTO,
 )
 
 object PlayerSettingsRepository {
@@ -137,6 +138,7 @@ object PlayerSettingsRepository {
     private var iosContrast = 0
     private var iosSaturation = 0
     private var iosGamma = 0
+    private var playerBackend = PlayerBackendOption.AUTO
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -198,6 +200,7 @@ object PlayerSettingsRepository {
         iosContrast = 0
         iosSaturation = 0
         iosGamma = 0
+        playerBackend = PlayerBackendOption.AUTO
         publish()
     }
 
@@ -305,6 +308,9 @@ object PlayerSettingsRepository {
         iosContrast = PlayerSettingsStorage.loadIosContrast() ?: 0
         iosSaturation = PlayerSettingsStorage.loadIosSaturation() ?: 0
         iosGamma = PlayerSettingsStorage.loadIosGamma() ?: 0
+        playerBackend = PlayerSettingsStorage.loadPlayerBackend()
+            ?.let { runCatching { PlayerBackendOption.valueOf(it) }.getOrNull() }
+            ?: PlayerBackendOption.AUTO
         publish()
     }
 
@@ -727,11 +733,17 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveIosSaturation(iosSaturation)
     }
 
-    fun setIosGamma(value: Int) {
+    fun getPlayerBackend(): PlayerBackendOption {
         ensureLoaded()
-        iosGamma = value.coerceIn(-50, 50)
+        return playerBackend
+    }
+
+    fun setPlayerBackend(option: PlayerBackendOption) {
+        ensureLoaded()
+        if (playerBackend == option) return
+        playerBackend = option
         publish()
-        PlayerSettingsStorage.saveIosGamma(iosGamma)
+        PlayerSettingsStorage.savePlayerBackend(option.name)
     }
 
     fun resetIosVideoOutputTuning() {
@@ -812,6 +824,7 @@ object PlayerSettingsRepository {
             iosContrast = iosContrast,
             iosSaturation = iosSaturation,
             iosGamma = iosGamma,
+            playerBackend = playerBackend,
         )
     }
 

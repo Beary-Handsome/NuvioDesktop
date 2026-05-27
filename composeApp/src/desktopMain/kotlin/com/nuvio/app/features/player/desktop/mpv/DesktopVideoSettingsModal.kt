@@ -230,14 +230,16 @@ internal fun DesktopVideoSettingsModal(
                                 onSettingsChanged()
                             },
                         )
+                        /*  Gamma setting temporarily disabled
                         PictureSlider(
                             title = "Gamma",
                             value = settings.iosGamma,
                             onValueChanged = {
-                                PlayerSettingsRepository.setIosGamma(it)
-                                onSettingsChanged()
+                                 PlayerSettingsRepository.setIosGamma(it)
+                                 onSettingsChanged()
                             },
                         )
+                        */
                     }
                 }
             }

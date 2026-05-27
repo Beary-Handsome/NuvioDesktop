@@ -101,15 +101,18 @@ HDC device_ = nullptr;
 #endif
 
 #ifdef __linux__
-	bool using_egl_ = true;
+	bool using_egl_ = false;
 	EGLDisplay egl_display_ = EGL_NO_DISPLAY;
 	EGLSurface egl_pbuffer_surface_ = EGL_NO_SURFACE;
+	EGLSurface egl_draw_surface_ = EGL_NO_SURFACE;
+	EGLSurface egl_read_surface_ = EGL_NO_SURFACE;
 	Display* glx_display_ = nullptr;
 	GLXDrawable glx_drawable_ = None;
 	bool owns_glx_display_ = false;
 	bool owns_glx_drawable_ = false;
 	GLXContext glx_context_ = nullptr;
 	bool owns_glx_context_ = false;
+	bool using_current_ctx_ = false;
 #endif
 
 std::shared_ptr<mediampv::compatible_thread> event_thread_;

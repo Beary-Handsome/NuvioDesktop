@@ -36,20 +36,15 @@ public class SkiaBitmapVideoSurface : VideoSurface(VideoSurfaceAdapters.getVideo
     private val videoSurface = SkiaVideoSurface()
 
     @Volatile
-    private lateinit var imageInfo: ImageInfo
+    private var imageInfo: ImageInfo? = null
 
     @Volatile
-    private lateinit var frameBytes: ByteArray
+    private var frameBytes: ByteArray? = null
     private val skiaBitmap: Bitmap = Bitmap()
     private val composeBitmap = mutableStateOf<ImageBitmap?>(null)
 
     public val enableRendering: MutableStateFlow<Boolean> = MutableStateFlow(false)
 
-    /**
-     * Set this to non-zero to draw frames even if [enableRendering] is true.
-     *
-     * @see ALLOWED_DRAW_FRAMES
-     */
     @JvmField
     @Volatile
     public var allowedDrawFrames: Int = 0
@@ -103,13 +98,15 @@ public class SkiaBitmapVideoSurface : VideoSurface(VideoSurfaceAdapters.getVideo
                 }
                 if (ALLOWED_DRAW_FRAMES.decrementAndGet(this@SkiaBitmapVideoSurface) < 0) return
             } else {
-                // 允许渲染, 不考虑 allowedDrawFrames
             }
 
             SwingUtilities.invokeLater {
+                val fb = frameBytes ?: return@invokeLater
                 nativeBuffers[0].rewind()
-                nativeBuffers[0].get(frameBytes)
-                skiaBitmap.installPixels(imageInfo, frameBytes, bufferFormat.width * 4)
+                nativeBuffers[0].get(fb)
+                imageInfo?.let { info ->
+                    skiaBitmap.installPixels(info, fb, bufferFormat.width * 4)
+                }
                 composeBitmap.value = skiaBitmap.asComposeImageBitmap()
             }
         }

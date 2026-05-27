@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioBackButton
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.isIos
 import nuvio.composeapp.generated.resources.*
@@ -120,6 +121,7 @@ fun DetailFloatingHeader(
                                 .widthIn(max = 240.dp)
                                 .height(42.dp),
                             onError = { logoLoadError = true },
+                            filterQuality = NuvioImageFilterQuality,
                         )
                     } else {
                         Text(

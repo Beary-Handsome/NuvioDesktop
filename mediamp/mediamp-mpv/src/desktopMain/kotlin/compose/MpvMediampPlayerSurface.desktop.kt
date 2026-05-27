@@ -150,11 +150,6 @@ actual fun MpvMediampPlayerSurface(
         onDispose {
             releaseTextureResources()
             player.releaseRenderContext()
-            // Tell Skia to forget any GL state it captured while this player
-            // owned the render context. The next player on the same window
-            // will start from a clean cache instead of inheriting stale FBO /
-            // texture bindings from this disposed player.
-            runCatching { components.directContext.resetGLAll() }
             renderContextInitialized = false
             lastContextSignature = null
             textureId = 0
@@ -325,6 +320,10 @@ actual fun MpvMediampPlayerSurface(
                 else -> runCatching { player.renderFrame() }
                     .getOrDefault(false)
             }
+            // Always reset GL state after renderFrame(), even on failure, to
+            // prevent corrupted GL state from triggering a SIGSEGV in Skiko's
+            // GrDirectContext::resetContext on the next frame.
+            runCatching { components.directContext.resetGLAll() }
             if (!renderResult) {
                 val failureKey = "$surfaceSizeKey:$textureId:$currentContextSignature"
                 if (lastLoggedRenderFailure != failureKey) {
@@ -364,7 +363,6 @@ actual fun MpvMediampPlayerSurface(
                     lastLoggedMpvProps = propsLogKey
                 }
             }
-            runCatching { components.directContext.resetGLAll() }
         }
         player.image?.let {
             skiaCanvas.drawImageRect(it, Rect.makeWH(logicalWidth, logicalHeight))

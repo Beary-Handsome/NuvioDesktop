@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import coil3.compose.AsyncImage
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -138,10 +139,12 @@ private sealed interface DesktopGifState {
 @Composable
 internal actual fun CollectionCardRemoteImage(
     imageUrl: String,
+    animatedImageUrl: String?,
     contentDescription: String,
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    animateNow: Boolean,
 ) {
     if (!animateIfPossible) {
         AsyncImage(
@@ -149,6 +152,7 @@ internal actual fun CollectionCardRemoteImage(
             contentDescription = contentDescription,
             modifier = modifier,
             contentScale = contentScale,
+            filterQuality = NuvioImageFilterQuality,
         )
         return
     }
@@ -217,6 +221,7 @@ internal actual fun CollectionCardRemoteImage(
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = contentScale,
+                filterQuality = NuvioImageFilterQuality,
             )
         }
     }

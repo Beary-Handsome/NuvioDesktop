@@ -7,14 +7,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 
 @Composable
 internal actual fun CollectionCardRemoteImage(
     imageUrl: String,
+    animatedImageUrl: String?,
     contentDescription: String,
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    animateNow: Boolean,
 ) {
     val context = LocalContext.current
     val request: ImageRequest = remember(context, imageUrl) {
@@ -26,6 +29,7 @@ internal actual fun CollectionCardRemoteImage(
     }
 
     AsyncImage(
+        filterQuality = NuvioImageFilterQuality,
         model = request,
         contentDescription = contentDescription,
         modifier = modifier,

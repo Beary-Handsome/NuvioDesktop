@@ -71,7 +71,7 @@ fun <T> NuvioShelfSection(
     modifier: Modifier = Modifier,
     headerHorizontalPadding: Dp = 0.dp,
     rowContentPadding: PaddingValues = PaddingValues(0.dp),
-    itemSpacing: Dp = 10.dp,
+    itemSpacing: Dp = 16.dp,
     showHeaderAccent: Boolean = true,
     onViewAllClick: (() -> Unit)? = null,
     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
@@ -211,6 +211,7 @@ fun NuvioPosterCard(
                     contentDescription = title,
                     modifier = Modifier.matchParentSize(),
                     contentScale = ContentScale.Crop,
+                    filterQuality = NuvioImageFilterQuality,
                 )
             } else {
                 Text(
@@ -238,6 +239,7 @@ fun NuvioPosterCard(
                                 .width(catalogLogoOverlaySize.width)
                                 .height(catalogLogoOverlaySize.height),
                             contentScale = ContentScale.Fit,
+                            filterQuality = NuvioImageFilterQuality,
                         )
                     } else {
                         Text(

@@ -33,8 +33,8 @@ private:
 #else
 #include <mutex>
 
-#define CREATE_LOCK(lock_name) std::recursive_mutex lock_name
-#define LOCK(lock_name) std::lock_guard<std::recursive_mutex> guard_##lock_name(lock_name)
+#define CREATE_LOCK(lock_name) std::mutex lock_name
+#define LOCK(lock_name) std::lock_guard<std::mutex> guard_##lock_name(lock_name)
 
 #endif
 

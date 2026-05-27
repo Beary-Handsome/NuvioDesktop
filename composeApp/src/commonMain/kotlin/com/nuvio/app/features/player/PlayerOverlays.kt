@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.nuvioTypeScale
 import nuvio.composeapp.generated.resources.Res
@@ -122,6 +123,7 @@ internal fun OpeningOverlay(
     ) {
         if (artwork != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = artwork,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
@@ -166,6 +168,7 @@ internal fun OpeningOverlay(
         ) {
             if (logo != null) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = logo,
                     contentDescription = null,
                     modifier = Modifier
@@ -343,6 +346,7 @@ internal fun PauseMetadataOverlay(
 
             if (!logo.isNullOrBlank()) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = logo,
                     contentDescription = title,
                     contentScale = ContentScale.Fit,

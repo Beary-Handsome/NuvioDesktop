@@ -60,6 +60,7 @@ import com.nuvio.app.features.player.IosHardwareDecoderMode
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.PlayerBackendOption
 import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.formatPlaybackSpeedLabel
@@ -181,6 +182,7 @@ private fun PlaybackSettingsSection(
     var showReuseCacheDurationDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showHoldToSpeedValueDialog by remember { mutableStateOf(false) }
+    var showPlayerBackendDialog by remember { mutableStateOf(false) }
     var showIosHardwareDecoderDialog by remember { mutableStateOf(false) }
     var showIosTargetPrimariesDialog by remember { mutableStateOf(false) }
     var showIosTargetTransferDialog by remember { mutableStateOf(false) }
@@ -269,6 +271,19 @@ private fun PlaybackSettingsSection(
                         description = formatPlaybackSpeedLabel(holdToSpeedValue),
                         isTablet = isTablet,
                         onClick = { showHoldToSpeedValueDialog = true },
+                    )
+                }
+                if (isDesktop) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_playback_player_backend),
+                        description = when (autoPlayPlayerSettings.playerBackend) {
+                            PlayerBackendOption.MPV -> stringResource(Res.string.settings_playback_player_backend_mpv)
+                            PlayerBackendOption.VLC -> stringResource(Res.string.settings_playback_player_backend_vlc)
+                            PlayerBackendOption.AUTO -> stringResource(Res.string.settings_playback_player_backend_auto)
+                        },
+                        isTablet = isTablet,
+                        onClick = { showPlayerBackendDialog = true },
                     )
                 }
             }
@@ -920,6 +935,17 @@ private fun PlaybackSettingsSection(
                 showHoldToSpeedValueDialog = false
             },
             onDismiss = { showHoldToSpeedValueDialog = false },
+        )
+    }
+
+    if (showPlayerBackendDialog) {
+        PlayerBackendSelectionDialog(
+            selectedBackend = autoPlayPlayerSettings.playerBackend,
+            onBackendSelected = { backend ->
+                PlayerSettingsRepository.setPlayerBackend(backend)
+                showPlayerBackendDialog = false
+            },
+            onDismiss = { showPlayerBackendDialog = false },
         )
     }
 
@@ -2524,3 +2550,94 @@ private fun libassRenderTypeRes(renderType: String): StringResource = when (rend
 
 @Composable
 private fun libassRenderTypeLabel(renderType: String): String = stringResource(libassRenderTypeRes(renderType))
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun PlayerBackendSelectionDialog(
+    selectedBackend: PlayerBackendOption,
+    onBackendSelected: (PlayerBackendOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        PlayerBackendOption.AUTO to Res.string.settings_playback_player_backend_auto,
+        PlayerBackendOption.MPV to Res.string.settings_playback_player_backend_mpv,
+        PlayerBackendOption.VLC to Res.string.settings_playback_player_backend_vlc,
+    )
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.settings_playback_player_backend),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { (option, labelRes) ->
+                        val isSelected = option == selectedBackend
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onBackendSelected(option) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = stringResource(labelRes),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.settings_playback_dialog_close),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}

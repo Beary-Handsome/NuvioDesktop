@@ -137,6 +137,7 @@ private fun ContinueWatchingSheetHeader(
                     contentDescription = item.title,
                     modifier = Modifier.matchParentSize(),
                     contentScale = if (item.isCloudLibraryItem()) ContentScale.Fit else ContentScale.Crop,
+                    filterQuality = NuvioImageFilterQuality,
                 )
             } else {
                 Text(

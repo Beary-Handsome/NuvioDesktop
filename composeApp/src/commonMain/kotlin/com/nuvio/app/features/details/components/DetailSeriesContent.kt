@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.desktopHorizontalLazyRowGestures
@@ -536,6 +537,7 @@ private fun SeasonPosterButton(
         ) {
             if (imageUrl != null) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = imageUrl,
                     contentDescription = label,
                     modifier = Modifier.fillMaxSize(),
@@ -693,6 +695,7 @@ private fun EpisodeHorizontalCard(
         val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched
         if (imageUrl != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = imageUrl,
                 contentDescription = video.title,
                 modifier = Modifier
@@ -1059,6 +1062,7 @@ private fun EpisodeListCard(
                 val shouldBlurArtwork = blurUnwatchedEpisodes && !isWatched
                 if (imageUrl != null) {
                     AsyncImage(
+                        filterQuality = NuvioImageFilterQuality,
                         model = imageUrl,
                         contentDescription = video.title,
                         modifier = Modifier
@@ -1220,8 +1224,8 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 20.dp,
             seasonChipVerticalPadding = 16.dp,
             seasonChipTextSize = 16.sp,
-            seasonPosterWidth = 140.dp,
-            seasonPosterHeight = 210.dp,
+            seasonPosterWidth = 180.dp,
+            seasonPosterHeight = 270.dp,
             seasonPosterRadius = 16.dp,
             cardHeight = 200.dp,
             imageWidth = 200.dp,
@@ -1250,8 +1254,8 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 18.dp,
             seasonChipVerticalPadding = 14.dp,
             seasonChipTextSize = 15.sp,
-            seasonPosterWidth = 130.dp,
-            seasonPosterHeight = 195.dp,
+            seasonPosterWidth = 160.dp,
+            seasonPosterHeight = 240.dp,
             seasonPosterRadius = 14.dp,
             cardHeight = 180.dp,
             imageWidth = 180.dp,
@@ -1280,8 +1284,8 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 16.dp,
             seasonChipVerticalPadding = 12.dp,
             seasonChipTextSize = 17.sp,
-            seasonPosterWidth = 120.dp,
-            seasonPosterHeight = 180.dp,
+            seasonPosterWidth = 150.dp,
+            seasonPosterHeight = 225.dp,
             seasonPosterRadius = 12.dp,
             cardHeight = 160.dp,
             imageWidth = 160.dp,
@@ -1310,8 +1314,8 @@ private fun seriesContentSizing(maxWidthDp: Float): SeriesContentSizing =
             seasonChipHorizontalPadding = 16.dp,
             seasonChipVerticalPadding = 12.dp,
             seasonChipTextSize = 15.sp,
-            seasonPosterWidth = 100.dp,
-            seasonPosterHeight = 150.dp,
+            seasonPosterWidth = 130.dp,
+            seasonPosterHeight = 195.dp,
             seasonPosterRadius = 8.dp,
             cardHeight = 120.dp,
             imageWidth = 120.dp,

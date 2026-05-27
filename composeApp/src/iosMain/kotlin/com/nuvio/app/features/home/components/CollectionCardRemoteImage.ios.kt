@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.darwin.Darwin
@@ -66,15 +67,18 @@ private class GifImageViewHolder {
 @Composable
 internal actual fun CollectionCardRemoteImage(
     imageUrl: String,
+    animatedImageUrl: String?,
     contentDescription: String,
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    animateNow: Boolean,
 ) {
     if (!animateIfPossible) {
         AsyncImage(
-            model = imageUrl,
-            contentDescription = contentDescription,
+        filterQuality = NuvioImageFilterQuality,
+        model = imageUrl,
+        contentDescription = contentDescription,
             modifier = modifier,
             contentScale = contentScale,
         )

@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.streams.StreamItem
@@ -377,6 +378,7 @@ private fun EpisodeRow(
         // Thumbnail
         if (episode.thumbnail != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = episode.thumbnail,
                 contentDescription = null,
                 modifier = Modifier

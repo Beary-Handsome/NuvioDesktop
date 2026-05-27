@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.MetaDetails
 import nuvio.composeapp.generated.resources.*
@@ -122,6 +123,7 @@ private fun ProductionChip(
     ) {
         if (!item.logo.isNullOrBlank()) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = item.logo,
                 contentDescription = item.name,
                 modifier = Modifier

@@ -88,6 +88,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
 import com.nuvio.app.features.debrid.DebridProviders
 import com.nuvio.app.features.debrid.DebridSettingsRepository
@@ -319,6 +320,7 @@ fun StreamsScreen(
                 ) {
                     if (!logo.isNullOrBlank()) {
                         AsyncImage(
+                            filterQuality = NuvioImageFilterQuality,
                             model = logo,
                             contentDescription = null,
                             modifier = Modifier
@@ -404,6 +406,7 @@ private fun MobileStreamsLayout(
     Box(modifier = modifier.fillMaxSize()) {
         if (heroArtwork != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = heroArtwork,
                 contentDescription = null,
                 modifier = Modifier
@@ -541,6 +544,7 @@ private fun MovieHeroBlock(
     ) {
         if (logo != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = logo,
                 contentDescription = null,
                 modifier = Modifier
@@ -589,6 +593,7 @@ private fun EpisodeHeroBlock(
         // Thumbnail image
         if (thumbnail != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = thumbnail,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),

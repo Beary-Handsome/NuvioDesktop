@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.build.TrailerPlaybackMode
 import com.nuvio.app.core.network.NetworkCondition
@@ -666,6 +667,7 @@ fun MetaDetailsScreen(
                             val backdropUrl = meta.background ?: meta.poster
                             if (backdropUrl != null) {
                                 AsyncImage(
+                                    filterQuality = NuvioImageFilterQuality,
                                     model = backdropUrl,
                                     contentDescription = null,
                                     modifier = Modifier
