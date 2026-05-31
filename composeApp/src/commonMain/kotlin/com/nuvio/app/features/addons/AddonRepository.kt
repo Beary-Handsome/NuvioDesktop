@@ -1,6 +1,7 @@
 package com.nuvio.app.features.addons
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.logging.redactedUrlForLog
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -265,7 +267,7 @@ object AddonRepository {
 
     fun removeAddon(manifestUrl: String) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
-        log.i { "removeAddon() — $manifestUrl" }
+        log.i { "removeAddon() — ${manifestUrl.redactedUrlForLog()}" }
         _uiState.update { current ->
             current.copy(
                 addons = current.addons.filterNot { it.manifestUrl == manifestUrl },
@@ -378,6 +380,21 @@ object AddonRepository {
         scope.launch {
             runCatching {
                 if (isUsingPrimaryAddonsFromSecondaryProfile()) {
+                    return@runCatching
+                }
+                // Pull-before-push guard: `sync_push_addons` is a replace-all, so pushing
+                // before a successful server pull would overwrite the account's addons with
+                // whatever the local/in-memory state happens to be. This guards two data-loss
+                // paths: (1) after sign-out wipes local state, a stray push before the next
+                // pull completes would empty the server; (2) anonymous/unauthenticated users
+                // never pull (SyncManager skips them), so they must never push onto the
+                // shared profile and clobber a real account's addons. Local mutations are
+                // still persisted on disk via persist(); they sync up after the next pull.
+                if (!pulledFromServer) {
+                    log.w {
+                        "pushToServer() — skipped: no successful server pull yet " +
+                            "(profileId=$currentProfileId); local changes persisted, not pushed"
+                    }
                     return@runCatching
                 }
                 val profileId = currentProfileId
@@ -497,7 +514,7 @@ private fun ensureManifestSuffix(url: String): String {
 
 private fun normalizeManifestUrl(rawUrl: String): String {
     val trimmed = rawUrl.trim()
-    require(trimmed.isNotEmpty()) { "Enter an addon URL." }
+    require(trimmed.isNotEmpty()) { runBlocking { getString(Res.string.addons_error_enter_url) } }
 
     val normalizedScheme = when {
         trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
