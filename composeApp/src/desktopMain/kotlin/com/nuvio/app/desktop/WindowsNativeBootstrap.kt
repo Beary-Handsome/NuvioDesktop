@@ -182,7 +182,7 @@ internal object WindowsNativeBootstrap {
         DesktopRuntimeLog.info("nativeBootstrap dlls=${dlls.joinToString(",") { it.name }}")
     }
 
-    private fun File.safePath(): String = absolutePath.replace("\\", "/")
+    private fun File.safePath(): String = DesktopRuntimeLog.safePath(this)
 
     private fun File.hasDll(name: String): Boolean =
         listFiles { file -> file.isFile && file.name.equals(name, ignoreCase = true) }?.isNotEmpty() == true

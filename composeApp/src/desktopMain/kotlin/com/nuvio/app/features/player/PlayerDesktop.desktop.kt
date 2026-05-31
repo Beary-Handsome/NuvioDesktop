@@ -551,6 +551,7 @@ internal actual object PlayerSettingsStorage {
     private const val streamAutoPlayReuseBingeGroupKey = "stream_auto_play_reuse_binge_group"
     private const val useLibassKey = "use_libass"
     private const val libassRenderTypeKey = "libass_render_type"
+    private const val playerBackendKey = "player_backend"
     private val syncKeys = listOf(
         showLoadingOverlayKey,
         resizeModeKey,
@@ -591,6 +592,7 @@ internal actual object PlayerSettingsStorage {
         nextEpisodeThresholdMinutesBeforeEndKey,
         useLibassKey,
         libassRenderTypeKey,
+        playerBackendKey,
         iosVideoOutputPresetKey,
         iosToneMappingModeKey,
         iosTargetPrimariesKey,
@@ -836,9 +838,13 @@ internal actual object PlayerSettingsStorage {
     }
 
     actual fun loadLibassRenderType(): String? = loadString(libassRenderTypeKey)
-
     actual fun saveLibassRenderType(renderType: String) {
         saveString(libassRenderTypeKey, renderType)
+    }
+
+    actual fun loadPlayerBackend(): String? = loadString(playerBackendKey)
+    actual fun savePlayerBackend(option: String) {
+        saveString(playerBackendKey, option)
     }
 
     // iOS video output settings (desktop uses these keys for sync with mobile)
@@ -924,6 +930,7 @@ internal actual object PlayerSettingsStorage {
         loadSubtitleBottomOffset()?.let { put(subtitleBottomOffsetKey, encodeSyncInt(it)) }
         loadUseLibass()?.let { put(useLibassKey, encodeSyncBoolean(it)) }
         loadLibassRenderType()?.let { put(libassRenderTypeKey, encodeSyncString(it)) }
+        loadPlayerBackend()?.let { put(playerBackendKey, encodeSyncString(it)) }
         loadIosVideoOutputPreset()?.let { put(iosVideoOutputPresetKey, encodeSyncString(it)) }
         loadIosToneMappingMode()?.let { put(iosToneMappingModeKey, encodeSyncString(it)) }
         loadIosTargetPrimaries()?.let { put(iosTargetPrimariesKey, encodeSyncString(it)) }
@@ -981,6 +988,7 @@ internal actual object PlayerSettingsStorage {
         payload.decodeSyncInt(subtitleBottomOffsetKey)?.let(::saveSubtitleBottomOffset)
         payload.decodeSyncBoolean(useLibassKey)?.let(::saveUseLibass)
         payload.decodeSyncString(libassRenderTypeKey)?.let(::saveLibassRenderType)
+        payload.decodeSyncString(playerBackendKey)?.let(::savePlayerBackend)
         payload.decodeSyncString(iosVideoOutputPresetKey)?.let(::saveIosVideoOutputPreset)
         payload.decodeSyncString(iosToneMappingModeKey)?.let(::saveIosToneMappingMode)
         payload.decodeSyncString(iosTargetPrimariesKey)?.let(::saveIosTargetPrimaries)

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.isIos
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -100,6 +101,7 @@ internal fun TabletStreamsLayout(
         ) {
             if (tabletBackdrop != null) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = tabletBackdrop,
                     contentDescription = null,
                     modifier = Modifier
@@ -229,6 +231,7 @@ private fun TabletMovieInfoPanel(
     ) {
         if (!logo.isNullOrBlank()) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = logo,
                 contentDescription = null,
                 modifier = Modifier
@@ -290,6 +293,7 @@ private fun TabletEpisodeInfoPanel(
     ) {
         if (!logo.isNullOrBlank()) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = logo,
                 contentDescription = null,
                 modifier = Modifier

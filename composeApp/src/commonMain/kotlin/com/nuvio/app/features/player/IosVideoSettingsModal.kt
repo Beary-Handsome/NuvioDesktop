@@ -184,14 +184,16 @@ internal fun IosVideoSettingsModal(
                                 onSettingsChanged()
                             },
                         )
+                        /*  Gamma setting temporarily disabled
                         PictureSlider(
                             title = "Gamma",
                             value = settings.iosGamma,
                             onValueChanged = {
                                 PlayerSettingsRepository.setIosGamma(it)
-                                onSettingsChanged()
+                                 onSettingsChanged()
                             },
                         )
+                        */
                     }
                 }
             }

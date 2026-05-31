@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.ui.NuvioInputField
@@ -409,6 +410,7 @@ private fun ProfileIdentityCard(
                 ) {
                     if (customAvatarUrl != null) {
                         AsyncImage(
+                            filterQuality = NuvioImageFilterQuality,
                             model = customAvatarUrl,
                             contentDescription = name,
                             modifier = Modifier.size(88.dp).clip(CircleShape),
@@ -416,6 +418,7 @@ private fun ProfileIdentityCard(
                         )
                     } else if (selectedAvatar != null) {
                         AsyncImage(
+                            filterQuality = NuvioImageFilterQuality,
                             model = avatarStorageUrl(selectedAvatar.storagePath),
                             contentDescription = selectedAvatar.displayName,
                             modifier = Modifier.size(88.dp).clip(CircleShape),
@@ -524,6 +527,7 @@ private fun AvatarChoiceItem(
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
+            filterQuality = NuvioImageFilterQuality,
             model = avatarStorageUrl(avatar.storagePath),
             contentDescription = avatar.displayName,
             modifier = Modifier.fillMaxSize().clip(CircleShape),

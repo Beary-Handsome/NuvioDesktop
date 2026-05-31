@@ -65,7 +65,6 @@ import uk.co.caprica.vlcj.media.MediaSlaveType
 import uk.co.caprica.vlcj.media.TrackType
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
-import uk.co.caprica.vlcj.player.component.CallbackMediaPlayerComponent
 import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
 import java.io.File
 import java.util.concurrent.RejectedExecutionException
@@ -100,7 +99,12 @@ public class VlcMediampPlayer(parentCoroutineContext: CoroutineContext) :
 //    )
 
     public val player: EmbeddedMediaPlayer = createPlayerLock.withLock {
-        MediaPlayerFactory("-v")
+        MediaPlayerFactory(
+            "-v",
+            "--intf=dummy",
+            "--avcodec-hw=none",
+            "--network-caching=5000",
+        )
             .mediaPlayers()
             .newEmbeddedMediaPlayer()
     }
@@ -344,11 +348,24 @@ public class VlcMediampPlayer(parentCoroutineContext: CoroutineContext) :
                     player.media().play(
                         data.uri,
                         *buildList {
-                            add("http-user-agent=${lowerHeaders["user-agent"] ?: "Mozilla/5.0"}")
+                            add("http-user-agent=${lowerHeaders["user-agent"] ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}")
                             val referer = lowerHeaders["referer"]
                             if (referer != null) {
                                 add("http-referrer=${referer}")
                             }
+                            val extraHeaders = lowerHeaders.filter { (key) -> key != "user-agent" && key != "referer" }
+                                .map { (key, value) -> "$key: $value" }
+                            if (extraHeaders.isNotEmpty()) {
+                                add("http-set-headers=${extraHeaders.joinToString("\n")}")
+                            }
+                            add("avcodec-hw=none")
+                            add("avcodec-threads=8")
+                            add("avcodec-skip-loopfilter=2")
+                            add("avcodec-skip-frame=2")
+                            add("network-caching=5000")
+                            add("live-caching=5000")
+                            add("file-caching=3000")
+                            add("http-continuous")
                             addAll(data.options)
                         }.toTypedArray(),
                     )
@@ -519,8 +536,24 @@ public class VlcMediampPlayer(parentCoroutineContext: CoroutineContext) :
 
         public fun prepareLibraries() {
             createPlayerLock.withLock {
-                NativeDiscovery().discover()
-                CallbackMediaPlayerComponent().release()
+                val discovered = NativeDiscovery().discover()
+                if (!discovered) {
+                    error(
+                        "Failed to discover libvlc native libraries. " +
+                            "Please ensure VLC (libvlc) is installed on your system.\n" +
+                            "On Debian/Ubuntu: sudo apt install vlc\n" +
+                            "On Fedora: sudo dnf install vlc\n" +
+                            "On Arch: sudo pacman -S vlc"
+                    )
+                }
+                // Initialize a temporary player with dummy interfaces to trigger
+                // any one-time libvlc setup without requiring a display server (X11/Wayland)
+                val factory = MediaPlayerFactory("--intf", "dummy")
+                try {
+                    factory.mediaPlayers().newEmbeddedMediaPlayer().release()
+                } finally {
+                    factory.release()
+                }
             }
         }
 

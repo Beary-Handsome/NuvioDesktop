@@ -1,5 +1,7 @@
 package com.nuvio.app.features.details.components
 
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -204,6 +206,7 @@ private fun TrailerCard(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clip(RoundedCornerShape(cornerRadius)),
                 contentScale = ContentScale.Crop,
+                filterQuality = NuvioImageFilterQuality,
             )
 
             Box(

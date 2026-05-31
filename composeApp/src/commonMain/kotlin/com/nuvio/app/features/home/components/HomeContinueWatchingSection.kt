@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.desktopContextMenuPointer
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.ui.NuvioProgressBar
 import com.nuvio.app.core.ui.NuvioShelfSection
 import com.nuvio.app.core.ui.posterCardClickable
@@ -412,7 +414,8 @@ private fun ContinueWatchingWideCard(
                 enabled = onClick != null || onLongClick != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = onLongClick,
-            ),
+            )
+            .desktopContextMenuPointer(onLongClick),
     ) {
         val shouldBlurArtwork = blurNextUp && useEpisodeThumbnails && item.isNextUp
         val artworkUrl = item.continueWatchingArtworkUrl(useEpisodeThumbnails)
@@ -542,6 +545,7 @@ private fun ContinueWatchingPosterCard(
                         .fillMaxSize()
                         .then(if (shouldBlurArtwork) Modifier.blur(18.dp) else Modifier),
                     contentScale = if (item.isCloudLibraryItem()) ContentScale.Fit else ContentScale.Crop,
+                    filterQuality = NuvioImageFilterQuality,
                 )
             }
             if (item.progressFraction <= 0f && item.seasonNumber != null && item.episodeNumber != null) {
@@ -637,6 +641,7 @@ private fun ArtworkPanel(
                     .fillMaxSize()
                     .then(if (blurred) Modifier.blur(18.dp) else Modifier),
                 contentScale = contentScale,
+                filterQuality = NuvioImageFilterQuality,
             )
         }
     }

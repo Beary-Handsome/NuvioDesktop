@@ -181,6 +181,8 @@ actual class MpvMediampPlayer(
                 handle.option("ao", if (useWaylandEGL) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
                 handle.option("vo", "libmpv")
                 handle.option("gpu-context", if (useWaylandEGL) "wayland" else "x11egl")
+                // Some VA-API drivers corrupt HEVC frames; restrict to known-safe codecs
+                hardwareDecoderCodecs = "h264,mpeg4,mpeg2video,vp8,vp9,av1"
             }
 
             else -> {}

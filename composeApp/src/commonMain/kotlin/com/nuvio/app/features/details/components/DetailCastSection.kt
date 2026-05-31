@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.details.MetaPerson
 import com.nuvio.app.features.details.castAvatarSharedTransitionKey
 import nuvio.composeapp.generated.resources.*
@@ -148,6 +149,7 @@ private fun CastItem(
         ) {
             if (person.photo != null) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = avatarRequest ?: person.photo,
                     contentDescription = person.name,
                     modifier = Modifier.matchParentSize(),

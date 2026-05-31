@@ -207,3 +207,7 @@ data class PlayerPlaybackSnapshot(
     val bufferedPositionMs: Long = 0L,
     val playbackSpeed: Float = 1f,
 )
+
+enum class PlayerBackendOption {
+    AUTO, MPV, VLC
+}

@@ -193,6 +193,7 @@ private fun PosterSheetHeader(
                     contentDescription = item.name,
                     modifier = Modifier.matchParentSize(),
                     contentScale = ContentScale.Crop,
+                    filterQuality = NuvioImageFilterQuality,
                 )
             } else {
                 Text(

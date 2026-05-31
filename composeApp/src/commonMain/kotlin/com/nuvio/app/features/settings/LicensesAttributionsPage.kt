@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.cloud.PremiumizeCloudLibraryPosterUrl
@@ -300,6 +301,7 @@ private fun ProviderLogoImage(
     isTablet: Boolean,
 ) {
     AsyncImage(
+        filterQuality = NuvioImageFilterQuality,
         model = url,
         contentDescription = contentDescription,
         modifier = Modifier

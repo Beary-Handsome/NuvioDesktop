@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import com.nuvio.app.core.ui.landscapePosterHeightForWidth
@@ -155,6 +156,7 @@ private fun EntityBrowseContent(
     Box(modifier = Modifier.fillMaxSize()) {
         if (backgroundUrl != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = backgroundUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
@@ -261,6 +263,7 @@ private fun EntityHeroSection(
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = header.logo,
                     contentDescription = header.name,
                     modifier = Modifier.height(44.dp),

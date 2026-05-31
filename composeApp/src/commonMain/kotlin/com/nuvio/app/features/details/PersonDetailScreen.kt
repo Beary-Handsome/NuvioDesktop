@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.i18n.localizedShortMonthName
 import com.nuvio.app.core.ui.landscapePosterHeightForWidth
 import com.nuvio.app.core.ui.landscapePosterWidth
@@ -383,6 +384,7 @@ private fun HeroSection(
         ) {
             if (!avatarUrl.isNullOrBlank()) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = avatarRequest ?: avatarUrl,
                     contentDescription = person.name,
                     modifier = Modifier.matchParentSize(),
@@ -562,6 +564,7 @@ private fun PersonDetailSkeleton(
                 ) {
                     if (!profilePhoto.isNullOrBlank()) {
                         AsyncImage(
+                            filterQuality = NuvioImageFilterQuality,
                             model = avatarRequest ?: profilePhoto,
                             contentDescription = personName,
                             modifier = Modifier.matchParentSize(),

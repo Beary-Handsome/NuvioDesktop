@@ -1,10 +1,13 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.DefaultTask
+import org.gradle.api.attributes.Attribute
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileSystemOperations
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Copy
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
@@ -12,11 +15,200 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.Properties
 import javax.imageio.ImageIO
+import javax.inject.Inject
+
+abstract class WindowsPackageAppImageBuildService : BuildService<BuildServiceParameters.None>
+
+abstract class PackageWindowsNativeRuntimeTask : DefaultTask() {
+    @get:Internal
+    abstract val mediampNativeBuildDir: DirectoryProperty
+
+    @get:Internal
+    abstract val mediampPrebuiltDir: DirectoryProperty
+
+    @get:Internal
+    abstract val system32Dir: DirectoryProperty
+
+    @get:Internal
+    abstract val appDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val nativeDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val launcherDir: DirectoryProperty
+
+    @get:Optional
+    @get:Input
+    abstract val stremioLibmpvDir: Property<String>
+
+    @get:Internal
+    abstract val lockFile: RegularFileProperty
+
+    @get:Inject
+    abstract val fileSystemOperations: FileSystemOperations
+
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @TaskAction
+    fun packageRuntime() {
+        val lock = lockFile.get().asFile
+        lock.parentFile.mkdirs()
+        RandomAccessFile(lock, "rw").channel.use { channel ->
+            channel.lock().use {
+                copyNativeDlls()
+                overrideLibmpvFromStremioIfConfigured()
+                patchLauncherConfig()
+                copyLauncherFallbackDlls()
+                verifyRequiredDlls()
+            }
+        }
+    }
+
+    private fun copyNativeDlls() {
+        fileSystemOperations.copy {
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+            from(mediampNativeBuildDir) {
+                include("*.dll")
+            }
+            from(mediampNativeBuildDir.dir("Release")) {
+                include("*.dll")
+            }
+            from(mediampPrebuiltDir) {
+                include("*.dll")
+            }
+            from(system32Dir) {
+                include("MSVCP140.dll", "msvcp140.dll")
+                include("VCRUNTIME140.dll", "vcruntime140.dll")
+                include("VCRUNTIME140_1.dll", "vcruntime140_1.dll")
+            }
+            into(nativeDir)
+        }
+    }
+
+    private fun overrideLibmpvFromStremioIfConfigured() {
+        val configuredDir = stremioLibmpvDir.orNull
+            ?: System.getProperty("nuvio.stremio.libmpv.dir")
+            ?: System.getenv("NUVIO_STREMIO_LIBMPV_DIR")
+        if (configuredDir.isNullOrBlank()) return
+
+        val baseDir = File(configuredDir)
+        check(baseDir.isDirectory) {
+            "Stremio libmpv directory is required but was not found: ${baseDir.absolutePath}. " +
+                "Run `git submodule update --init --recursive stremio-community-v5` or set NUVIO_STREMIO_LIBMPV_DIR."
+        }
+        val source = baseDir.resolve("libmpv-2.dll")
+        val resolvedSource = when {
+            source.isFile -> source
+            else -> extractLibmpvFromRarIfNeeded(baseDir)
+        }
+        check(resolvedSource != null && resolvedSource.isFile) {
+            "Stremio libmpv-2.dll is required but could not be resolved from ${baseDir.absolutePath}. " +
+                "Expected libmpv-2.dll or extractable libmpv-2.dll.rar; set NUVIO_7Z if 7z is not on PATH."
+        }
+
+        val destination = nativeDir.get().asFile.resolve("libmpv-2.dll")
+        runCatching {
+            resolvedSource.copyTo(destination, overwrite = true)
+        }.onFailure {
+            error("Failed to copy Stremio libmpv-2.dll from ${resolvedSource.absolutePath} to ${destination.absolutePath}: ${it.message}")
+        }
+    }
+
+    private fun extractLibmpvFromRarIfNeeded(baseDir: File): File? {
+        val rarFile = baseDir.resolve("libmpv-2.dll.rar")
+        if (!rarFile.isFile) return null
+        val extractDir = nativeDir.get().asFile.resolve(".stremio-extract")
+        extractDir.mkdirs()
+
+        val extractTarget = extractDir.resolve("libmpv-2.dll")
+        if (extractTarget.isFile) return extractTarget
+
+        val sevenZip = System.getenv("NUVIO_7Z") ?: "7z"
+        execOperations.exec {
+            commandLine(sevenZip, "x", rarFile.absolutePath, "-o${extractDir.absolutePath}", "-y")
+        }
+        return extractTarget.takeIf { it.isFile }
+    }
+
+    private fun patchLauncherConfig() {
+        val appDirectory = appDir.get().asFile
+        val nativeDirectory = nativeDir.get().asFile
+        val cfgFile = appDirectory.resolve("Nuvio.cfg")
+        if (!cfgFile.isFile) return
+
+        val libraryPathOption = "java-options=-Djava.library.path=\$APPDIR/native"
+        val lines = cfgFile.readLines()
+        var replaced = false
+        val patchedLines = lines.map { line ->
+            if (line.startsWith("java-options=-Djava.library.path=")) {
+                replaced = true
+                libraryPathOption
+            } else {
+                line
+            }
+        }.toMutableList()
+        if (!replaced) {
+            val javaOptionsIndex = patchedLines.indexOf("[JavaOptions]")
+            if (javaOptionsIndex >= 0) {
+                patchedLines.add(javaOptionsIndex + 1, libraryPathOption)
+            } else {
+                patchedLines.add("")
+                patchedLines.add("[JavaOptions]")
+                patchedLines.add(libraryPathOption)
+            }
+        }
+        cfgFile.writeText(patchedLines.joinToString(System.lineSeparator()) + System.lineSeparator())
+    }
+
+    private fun copyLauncherFallbackDlls() {
+        val nativeDirectory = nativeDir.get().asFile
+        val launcherDirectory = launcherDir.get().asFile
+
+        nativeDirectory.listFiles { file -> file.isFile && file.extension.equals("dll", ignoreCase = true) }
+            .orEmpty()
+            .forEach { dll ->
+                dll.copyTo(launcherDirectory.resolve(dll.name), overwrite = true)
+            }
+    }
+
+    private fun verifyRequiredDlls() {
+        val nativeDirectory = nativeDir.get().asFile
+        val launcherDirectory = launcherDir.get().asFile
+
+        fun File.hasDll(name: String): Boolean =
+            listFiles { file -> file.isFile && file.name.equals(name, ignoreCase = true) }?.isNotEmpty() == true
+
+        val requiredDlls = listOf(
+            "mediampv.dll",
+            "libmpv-2.dll",
+            "avcodec-61.dll",
+            "avformat-61.dll",
+            "avutil-59.dll",
+            "swscale-8.dll",
+            "vulkan-1.dll",
+            "MSVCP140.dll",
+            "VCRUNTIME140.dll",
+            "VCRUNTIME140_1.dll",
+        )
+        val missingFromNative = requiredDlls.filterNot { nativeDirectory.hasDll(it) }
+        val missingFromLauncher = requiredDlls.filterNot { launcherDirectory.hasDll(it) }
+        check(missingFromNative.isEmpty()) {
+            "Windows native runtime is incomplete in ${nativeDirectory.absolutePath}: missing ${missingFromNative.joinToString()}"
+        }
+        check(missingFromLauncher.isEmpty()) {
+            "Windows launcher native fallback is incomplete in ${launcherDirectory.absolutePath}: missing ${missingFromLauncher.joinToString()}"
+        }
+    }
+}
 
 abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     private val defaultSupabaseUrl = "https://dpyhjjcoabcglfmgecug.supabase.co"
@@ -102,6 +294,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
         val contributionsExtra = resolveRuntimeValue("CONTRIBUTIONS_EXTRA", releaseProperties, localProperties)
         val imdbRatingsApiBaseUrl = resolveRuntimeValue("IMDB_RATINGS_API_BASE_URL", releaseProperties, localProperties)
         val imdbTapframeApiBaseUrl = resolveRuntimeValue("IMDB_TAPFRAME_API_BASE_URL", releaseProperties, localProperties)
+        val directDebridApiBaseUrl = resolveRuntimeValue("DIRECT_DEBRID_API_BASE_URL", releaseProperties, localProperties)
         val premiumizeClientId = resolveRuntimeValue("PREMIUMIZE_CLIENT_ID", releaseProperties, localProperties)
 
         val outDir = outputDir.get().asFile
@@ -265,12 +458,9 @@ abstract class SyncWindowsPackageResourcesTask : DefaultTask() {
         val sidebarBmpTarget = targetRoot.resolve("BackgroundImage.bmp")
         sidebarBmpTarget.parentFile.mkdirs()
         val sidebarImage = ImageIO.read(sidebarPngFile)
-        if (sidebarImage != null && ImageIO.write(sidebarImage, "bmp", sidebarBmpTarget)) {
-            logger.info("WiX sidebar BMP written from PNG: ${sidebarBmpTarget.absolutePath}")
-        } else {
-            logger.warn("Could not convert sidebar PNG to BMP: ${sidebarPngFile.absolutePath}; using banner BMP as fallback")
-            val fallbackBmp = installerBannerBmp.get().asFile
-            fallbackBmp.copyTo(sidebarBmpTarget, overwrite = true)
+            ?: error("Unable to read Windows installer sidebar PNG: ${sidebarPngFile.absolutePath}")
+        check(ImageIO.write(sidebarImage, "bmp", sidebarBmpTarget)) {
+            "Unable to write WiX sidebar BMP: ${sidebarBmpTarget.absolutePath}"
         }
 
         val bannerBmpFile = installerBannerBmp.get().asFile
@@ -299,17 +489,12 @@ fun readXcconfigValue(file: File, key: String): String? {
         ?.second
 }
 
-val hasAndroid = System.getenv("ANDROID_HOME") != null
-
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinxSerialization)
-}
-
-if (hasAndroid) {
-    pluginManager.apply("com.android.application")
 }
 
 val supabaseProps = Properties().apply {
@@ -324,6 +509,7 @@ val releaseKeystore = releaseStoreFile?.let(rootProject::file)
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
     ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
+val windowsSafeVersion = releaseAppVersionName.split('.').take(3).joinToString(".")
 val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
     ?.toIntOrNull()
     ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
@@ -347,10 +533,7 @@ val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-con
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
-    val localProps = rootProject.layout.projectDirectory.file("local.properties")
-    if (localProps.asFile.exists()) {
-        localPropertiesFile.set(localProps)
-    }
+    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
     val releaseProperties = layout.projectDirectory.file("runtime-config/release.properties")
     if (releaseProperties.asFile.exists()) {
         releasePropertiesFile.set(releaseProperties)
@@ -364,12 +547,9 @@ tasks.withType<KotlinCompilationTask<*>>().configureEach {
 }
 
 kotlin {
-    if (System.getenv("ANDROID_HOME") != null) {
-        @Suppress("DEPRECATION")
-        androidTarget {
-            compilerOptions {
-                jvmTarget.set(JvmTarget.JVM_11)
-            }
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
         }
     }
 
@@ -423,15 +603,16 @@ kotlin {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.ktor.client.java)
                 implementation(libs.kotlinx.coroutines.swing)
-                implementation(libs.jna)
-                implementation("com.squareup.okhttp3:okhttp:4.12.0")
-                implementation("org.openani.mediamp:mediamp-api:0.1.0-dev-1")
-                implementation("org.openani.mediamp:mediamp-mpv:0.1.0-dev-1")
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
+                implementation(libs.jna)
+                implementation("net.java.dev.jna:jna-platform:5.14.0")
+                implementation("com.squareup.okhttp3:okhttp:4.12.0")
+                implementation("org.openani.mediamp:mediamp-api:0.1.0-dev-1")
+                implementation("org.openani.mediamp:mediamp-mpv:0.1.0-dev-1") { attributes { attribute(Attribute.of("org.jetbrains.kotlin.platform.type", String::class.java), "jvm") } }
+                implementation("org.openani.mediamp:mediamp-vlc:0.1.0-dev-1") { attributes { attribute(Attribute.of("org.jetbrains.kotlin.platform.type", String::class.java), "jvm") } }
             }
         }
-        if (System.getenv("ANDROID_HOME") != null) {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.appcompat)
@@ -456,7 +637,6 @@ kotlin {
             implementation(libs.androidx.media3.container)
             implementation(libs.androidx.media3.extractor)
             implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
-        }
         }
         commonMain.dependencies {
             implementation(libs.coil.compose)
@@ -486,7 +666,17 @@ kotlin {
     }
 }
 
+afterEvaluate {
+    dependencies {
+        add("fullImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
+        add("fullImplementation", libs.ksoup)
+    }
+}
 
+dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+    debugImplementation(libs.compose.uiTooling)
+}
 
 compose.desktop {
     application {
@@ -514,7 +704,7 @@ compose.desktop {
 
         nativeDistributions {
             packageName = "Nuvio"
-            packageVersion = releaseAppVersionName
+            packageVersion = windowsSafeVersion
             vendor = "Creepso"
             modules("java.net.http")
 
@@ -522,7 +712,7 @@ compose.desktop {
             when {
                 hostOs.contains("windows") -> targetFormats(TargetFormat.Exe, TargetFormat.Msi)
                 hostOs.contains("mac") -> targetFormats(TargetFormat.Dmg)
-                hostOs.contains("nux") -> targetFormats(TargetFormat.Deb, TargetFormat.Rpm)
+                hostOs.contains("linux") -> targetFormats(TargetFormat.Deb, TargetFormat.AppImage)
             }
 
             windows {
@@ -530,8 +720,8 @@ compose.desktop {
                 menu = true
                 shortcut = true
                 menuGroup = "Nuvio"
-                exePackageVersion = releaseAppVersionName
-                msiPackageVersion = releaseAppVersionName
+                exePackageVersion = windowsSafeVersion
+                msiPackageVersion = windowsSafeVersion
             }
 
             macOS {
@@ -544,17 +734,13 @@ compose.desktop {
                     """.trimIndent()
                 }
             }
-
-            linux {
-                iconFile.set(project.file("desktop-icons/nuvio_window_icon.png"))
-                packageName = "nuvio"
-                packageVersion = releaseAppVersionName
-            }
         }
     }
 }
 
-val packageWindowsNativeRuntime = tasks.register<Copy>("packageWindowsNativeRuntime") {
+val windowsNativeRuntimeLockFile = layout.buildDirectory.file("compose/tmp/windows-native-runtime.lock")
+
+val packageWindowsNativeRuntime = tasks.register<PackageWindowsNativeRuntimeTask>("packageWindowsNativeRuntime") {
     val mediampRootDir = rootProject.file("mediamp")
     val mediampNativeBuildDir = mediampRootDir.resolve("mediamp-mpv/build-ci")
     val mediampPrebuiltDir = mediampRootDir.resolve("mediamp-mpv/libmpv/lib/windows/x86_64")
@@ -565,246 +751,39 @@ val packageWindowsNativeRuntime = tasks.register<Copy>("packageWindowsNativeRunt
 
     group = "compose desktop"
     description = "Copies MediaMP/MPV native DLLs into the Windows app image and points java.library.path at them."
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    from(mediampNativeBuildDir) {
-        include("*.dll")
-    }
-    from(mediampNativeBuildDir.resolve("Release")) {
-        include("*.dll")
-    }
-    from(mediampPrebuiltDir) {
-        include("*.dll")
-    }
-    from(system32Dir) {
-        include("MSVCP140.dll", "msvcp140.dll")
-        include("VCRUNTIME140.dll", "vcruntime140.dll")
-        include("VCRUNTIME140_1.dll", "vcruntime140_1.dll")
-    }
-    into(nativeDir)
+    this.mediampNativeBuildDir.set(mediampNativeBuildDir)
+    this.mediampPrebuiltDir.set(mediampPrebuiltDir)
+    this.system32Dir.set(system32Dir)
+    this.appDir.set(appDir)
+    this.nativeDir.set(nativeDir)
+    this.launcherDir.set(launcherDir)
+    val defaultStremioDir = rootProject.file("stremio-community-v5/deps/libmpv/x86_64")
+    this.stremioLibmpvDir.set(
+        providers.gradleProperty("nuvio.stremio.libmpv.dir")
+            .orElse(providers.environmentVariable("NUVIO_STREMIO_LIBMPV_DIR"))
+            .orElse(defaultStremioDir.absolutePath),
+    )
+    this.lockFile.set(windowsNativeRuntimeLockFile)
+}
 
-    val quickJsJar: java.io.File? = try {
-        project.configurations.getByName("runtimeClasspath").files
-            .firstOrNull { file -> file.name.contains("quickjs") && file.name.endsWith(".jar") }
-    } catch (_: Exception) { null }
-    if (quickJsJar != null) {
-        from(project.zipTree(quickJsJar)) {
-            include("jni/windows_x64/libquickjs.dll")
-            rename("libquickjs.dll", "quickjs.dll")
-            includeEmptyDirs = false
-        }
-    }
+val windowsPackageAppImageService = gradle.sharedServices.registerIfAbsent(
+    "windowsPackageAppImage",
+    WindowsPackageAppImageBuildService::class,
+) {
+    maxParallelUsages.set(1)
+}
 
-    doLast {
-        val appDirectory = appDir.get().asFile
-        val nativeDirectory = nativeDir.get().asFile
-        val launcherDirectory = launcherDir.get().asFile
-        val cfgFile = appDirectory.resolve("Nuvio.cfg")
-        if (!cfgFile.isFile) return@doLast
-
-        val libraryPathOption = "java-options=-Djava.library.path=\$APPDIR/native"
-        val lines = cfgFile.readLines()
-        var replaced = false
-        val patchedLines = lines.map { line ->
-            if (line.startsWith("java-options=-Djava.library.path=")) {
-                replaced = true
-                libraryPathOption
-            } else {
-                line
-            }
-        }.toMutableList()
-        if (!replaced) {
-            val javaOptionsIndex = patchedLines.indexOf("[JavaOptions]")
-            if (javaOptionsIndex >= 0) {
-                patchedLines.add(javaOptionsIndex + 1, libraryPathOption)
-            } else {
-                patchedLines.add("")
-                patchedLines.add("[JavaOptions]")
-                patchedLines.add(libraryPathOption)
-            }
-        }
-        cfgFile.writeText(patchedLines.joinToString(System.lineSeparator()) + System.lineSeparator())
-
-        nativeDirectory.listFiles { file -> file.isFile && file.extension.equals("dll", ignoreCase = true) }
-            .orEmpty()
-            .forEach { dll ->
-                dll.copyTo(launcherDirectory.resolve(dll.name), overwrite = true)
-            }
-
-        val requiredDlls = listOf(
-            "mediampv.dll",
-            "libmpv-2.dll",
-            "quickjs.dll",
-            "avcodec-61.dll",
-            "avformat-61.dll",
-            "avutil-59.dll",
-            "swscale-8.dll",
-            "vulkan-1.dll",
-            "MSVCP140.dll",
-            "VCRUNTIME140.dll",
-            "VCRUNTIME140_1.dll",
-        )
-        fun File.hasDll(name: String): Boolean =
-            listFiles { file -> file.isFile && file.name.equals(name, ignoreCase = true) }?.isNotEmpty() == true
-
-        val missingFromNative = requiredDlls.filterNot { nativeDirectory.hasDll(it) }
-        val missingFromLauncher = requiredDlls.filterNot { launcherDirectory.hasDll(it) }
-        check(missingFromNative.isEmpty()) {
-            "Windows native runtime is incomplete in ${nativeDirectory.absolutePath}: missing ${missingFromNative.joinToString()}"
-        }
-        check(missingFromLauncher.isEmpty()) {
-            "Windows launcher native fallback is incomplete in ${launcherDirectory.absolutePath}: missing ${missingFromLauncher.joinToString()}"
-        }
-    }
+packageWindowsNativeRuntime.configure {
+    usesService(windowsPackageAppImageService)
 }
 
 tasks.matching { it.name == "createReleaseDistributable" }.configureEach {
-    if (System.getProperty("os.name").lowercase().contains("win")) {
-        finalizedBy(packageWindowsNativeRuntime)
-    }
-    if (System.getProperty("os.name").lowercase().contains("nux")) {
-        finalizedBy(packageLinuxNativeRuntime)
-    }
+    finalizedBy(packageWindowsNativeRuntime)
 }
 
-if (System.getProperty("os.name").lowercase().contains("win")) {
-    packageWindowsNativeRuntime.configure {
-        mustRunAfter(tasks.matching { it.name == "createReleaseDistributable" })
-    }
-}
-
-val packageLinuxNativeRuntime = tasks.register<Copy>("packageLinuxNativeRuntime") {
-    val mediampRootDir = rootProject.file("mediamp")
-    val mediampNativeBuildDir = mediampRootDir.resolve("mediamp-mpv/build-ci")
-    val mediampPrebuiltDir = mediampRootDir.resolve("mediamp-mpv/libmpv/lib/linux/x86_64")
-    val appDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio/app")
-    val nativeDir = appDir.map { it.dir("native") }
-    val launcherDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio")
-
-    group = "compose desktop"
-    description = "Copies MediaMP/MPV native .so files into the Linux app image."
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    from(mediampNativeBuildDir) {
-        include("*.so")
-    }
-    from(mediampPrebuiltDir) {
-        include("*.so")
-    }
-    into(nativeDir)
-
-    // This task patches lib/app/Nuvio.cfg after the native .so files have been copied.
-    // Note: appDirectory was previously declared but is not needed; it is left as an inline
-    // reference if needed later.
-    doLast {
-        val nativeDirectory = nativeDir.get().asFile
-        val launcherDirectory = launcherDir.get().asFile
-        val cfgFile = launcherDirectory.resolve("lib/app/Nuvio.cfg")
-        if (!cfgFile.isFile) return@doLast
-
-        val libraryPathOption = "java-options=-Djava.library.path=\$APPDIR/native"
-        val lines = cfgFile.readLines()
-        var replaced = false
-        val patchedLines = lines.map { line ->
-            if (line.startsWith("java-options=-Djava.library.path=")) {
-                replaced = true
-                libraryPathOption
-            } else {
-                line
-            }
-        }.toMutableList()
-        if (!replaced) {
-            val javaOptionsIndex = patchedLines.indexOf("[JavaOptions]")
-            if (javaOptionsIndex >= 0) {
-                patchedLines.add(javaOptionsIndex + 1, libraryPathOption)
-            } else {
-                patchedLines.add("")
-                patchedLines.add("[JavaOptions]")
-                patchedLines.add(libraryPathOption)
-            }
-        }
-        cfgFile.writeText(patchedLines.joinToString(System.lineSeparator()) + System.lineSeparator())
-
-        nativeDirectory.listFiles { file -> file.isFile && file.name.endsWith(".so") }
-            .orEmpty()
-            .forEach { so ->
-                so.copyTo(launcherDirectory.resolve(so.name), overwrite = true)
-            }
-    }
-}
-
-// AppImage packaging for Linux
-val packageReleaseAppImage = tasks.register("packageReleaseAppImage") {
-    group = "compose desktop"
-    description = "Builds a Linux AppImage from the release distribution using appimagetool."
-    dependsOn("createReleaseDistributable")
-    dependsOn(packageLinuxNativeRuntime)
-
-    onlyIf { System.getProperty("os.name").lowercase().contains("nux") }
-
-    val distDir = layout.buildDirectory.dir("compose/binaries/main-release/app/Nuvio")
-    val appDirRoot = layout.buildDirectory.dir("compose/binaries/main-release/appimage/AppDir")
-    val outputDir = layout.buildDirectory.dir("compose/binaries/main-release/appimage")
-
-    doLast {
-        val appDir = appDirRoot.get().asFile
-        val appDirUsr = appDir.resolve("usr/lib/nuvio")
-        appDir.deleteRecursively()
-        appDir.mkdirs()
-
-        distDir.get().asFile.copyRecursively(appDirUsr, overwrite = true)
-
-        val D = '$'
-
-        val appRun = appDir.resolve("AppRun")
-        appRun.writeText("""#!/bin/bash
-HERE="$(cd "$(dirname "$0")" && pwd)"
-exec "${D}HERE/usr/lib/nuvio/bin/Nuvio" "${D}@"
-""")
-        appRun.setExecutable(true)
-
-        val desktopFile = appDir.resolve("nuvio.desktop")
-        desktopFile.writeText("""[Desktop Entry]
-Name=Nuvio
-Comment=Anime streaming desktop app
-Exec=nuvio
-Icon=nuvio
-Type=Application
-Categories=AudioVideo;Player;
-Terminal=false
-StartupNotify=true
-""")
-
-        val iconFile = project.file("desktop-icons/nuvio_window_icon.png")
-        if (iconFile.exists()) {
-            iconFile.copyTo(appDir.resolve("nuvio.png"), overwrite = true)
-        } else {
-            logger.warn("Icon file not found at desktop-icons/nuvio_window_icon.png; AppImage will lack an icon")
-        }
-
-        val outputFile = outputDir.get().asFile.resolve("Nuvio-${releaseAppVersionName}-x86_64.AppImage")
-        outputFile.parentFile.mkdirs()
-
-        logger.lifecycle("Running appimagetool on ${appDir.path} -> ${outputFile.path}")
-        val process = ProcessBuilder(
-            "appimagetool",
-            "--no-appstream",
-            appDir.absolutePath,
-            outputFile.absolutePath,
-        ).inheritIO().start()
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            throw GradleException("appimagetool failed with exit code $exitCode — ensure appimagetool is on PATH")
-        }
-        logger.lifecycle("AppImage created: ${outputFile.path}")
-    }
-}
-
-tasks.matching {
-    it.name == "packageReleaseAppImage"
-}.configureEach {
-    dependsOn("createReleaseDistributable")
-    dependsOn(packageLinuxNativeRuntime)
+packageWindowsNativeRuntime.configure {
+    mustRunAfter(tasks.matching { it.name == "createReleaseDistributable" })
 }
 
 val windowsPackageResourcesSource = layout.projectDirectory.dir("src/windowsPackageResources").asFile
@@ -828,6 +807,7 @@ tasks.matching {
         it.name == "packageReleaseExe" ||
         it.name == "packageReleaseMsi"
 }.configureEach {
+    usesService(windowsPackageAppImageService)
     dependsOn("createReleaseDistributable")
     dependsOn(packageWindowsNativeRuntime)
     dependsOn(syncWindowsPackageResources)
@@ -840,26 +820,14 @@ syncWindowsPackageResources.configure {
     })
 }
 
-tasks.matching {
-    it.name == "packageReleaseDeb" || it.name == "packageReleaseRpm"
-}.configureEach {
-    dependsOn("createReleaseDistributable")
-    dependsOn(packageLinuxNativeRuntime)
-}
-
-tasks.matching { it.name == "run" }.configureEach {
-    if (this is JavaExec) environment("LC_NUMERIC", "C")
-}
-
 tasks.matching { it.name == "runReleaseDistributable" }.configureEach {
-    if (System.getProperty("os.name").lowercase().contains("win")) {
-        dependsOn(packageWindowsNativeRuntime)
-    }
+    dependsOn(packageWindowsNativeRuntime)
 }
 
 val packageReleaseInnoExe = tasks.register<Exec>("packageReleaseInnoExe") {
     group = "compose desktop"
     description = "Builds a Windows installer with Inno Setup (no WiX), using the release app image."
+    usesService(windowsPackageAppImageService)
     dependsOn("createReleaseDistributable")
     dependsOn(packageWindowsNativeRuntime)
 
@@ -897,6 +865,7 @@ val packageReleaseInnoExe = tasks.register<Exec>("packageReleaseInnoExe") {
 tasks.register<Zip>("packageReleasePortableZip") {
     group = "compose desktop"
     description = "Builds a portable Windows ZIP package (no installer, no WiX/NSIS/Inno)."
+    usesService(windowsPackageAppImageService)
     dependsOn("createReleaseDistributable")
     dependsOn(packageWindowsNativeRuntime)
 
@@ -908,7 +877,6 @@ tasks.register<Zip>("packageReleasePortableZip") {
     archiveExtension.set("zip")
     destinationDirectory.set(layout.buildDirectory.dir("compose/binaries/main-release/portable"))
 
-    // Ensure the portable marker sits next to `Nuvio.exe` inside the generated ZIP root.
     into(portableRootName)
     from(appImageDir)
     doFirst {
@@ -933,13 +901,72 @@ configurations.all {
     exclude(group = "androidx.media3", module = "media3-ui")
 }
 
-if (hasAndroid) {
-    project.extra["releaseAppVersionName"] = releaseAppVersionName
-    project.extra["releaseAppVersionCode"] = releaseAppVersionCode
-    project.extra["releaseKeystore"] = releaseKeystore
-    project.extra["releaseStorePassword"] = releaseStorePassword
-    project.extra["releaseKeyAlias"] = releaseKeyAlias
-    project.extra["releaseKeyPassword"] = releaseKeyPassword
-    project.extra["fullCommonSourceDir"] = fullCommonSourceDir
-    apply(from = file("android.gradle.kts"))
+android {
+    namespace = "com.nuvio.app"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+
+    signingConfigs {
+        create("release") {
+            if (releaseKeystore != null && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    defaultConfig {
+        applicationId = "com.nuvio.app"
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        versionCode = releaseAppVersionCode
+        versionName = releaseAppVersionName
+    }
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("full") {
+            dimension = "distribution"
+        }
+        create("playstore") {
+            dimension = "distribution"
+        }
+    }
+    sourceSets.getByName("full") {
+        manifest.srcFile("src/androidFull/AndroidManifest.xml")
+        java.srcDir(fullCommonSourceDir)
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            pickFirsts += listOf(
+                "lib/*/libc++_shared.so",
+                "lib/*/libavcodec.so",
+                "lib/*/libavutil.so",
+                "lib/*/libswscale.so",
+                "lib/*/libswresample.so"
+            )
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.getByName("release")
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
+        }
+    }
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
 }

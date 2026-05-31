@@ -192,6 +192,7 @@ fun NuvioFloatingPrompt(
                         ) {
                             if (imageUrl != null) {
                                 AsyncImage(
+                                    filterQuality = NuvioImageFilterQuality,
                                     model = imageUrl,
                                     contentDescription = null,
                                     modifier = Modifier.matchParentSize(),

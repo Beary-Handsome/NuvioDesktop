@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioDropdownChip
@@ -252,6 +253,7 @@ private fun DiscoverPosterTile(
         ) {
             if (item.poster != null) {
                 AsyncImage(
+                    filterQuality = NuvioImageFilterQuality,
                     model = item.poster,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),

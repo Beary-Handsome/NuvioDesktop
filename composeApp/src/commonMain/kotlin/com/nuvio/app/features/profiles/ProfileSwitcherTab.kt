@@ -69,6 +69,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.isIos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -505,6 +506,7 @@ private fun PopupProfileBubble(
             ) {
                 if (avatarImageUrl != null) {
                     AsyncImage(
+                        filterQuality = NuvioImageFilterQuality,
                         model = avatarImageUrl,
                         contentDescription = profile.name,
                         modifier = Modifier.size(48.dp).clip(CircleShape),
@@ -819,6 +821,7 @@ fun ActiveProfileMiniAvatar(
     ) {
         if (avatarImageUrl != null) {
             AsyncImage(
+                filterQuality = NuvioImageFilterQuality,
                 model = avatarImageUrl,
                 contentDescription = profile.name,
                 modifier = Modifier.size(size.dp).clip(CircleShape),

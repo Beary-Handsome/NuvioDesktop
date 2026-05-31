@@ -4,7 +4,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -206,7 +208,18 @@ fun main(args: Array<String>) {
                 LocalDesktopWindow provides window,
                 LocalUriHandler provides desktopUriHandler,
             ) {
-                App()
+                val currentDensity = LocalDensity.current
+                val isLinux = System.getProperty("os.name").lowercase().contains("linux")
+                val scaleFactor = if (isLinux) 1.25f else 1.0f
+                
+                CompositionLocalProvider(
+                    LocalDensity provides Density(
+                        density = currentDensity.density * scaleFactor,
+                        fontScale = currentDensity.fontScale * scaleFactor
+                    )
+                ) {
+                    App()
+                }
             }
         }
     }
