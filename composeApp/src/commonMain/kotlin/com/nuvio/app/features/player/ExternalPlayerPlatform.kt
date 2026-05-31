@@ -7,9 +7,13 @@ data class ExternalPlayerApp(
 
 data class ExternalPlayerPlaybackRequest(
     val sourceUrl: String,
+    val sourceAudioUrl: String? = null,
     val title: String,
     val streamTitle: String? = null,
     val sourceHeaders: Map<String, String> = emptyMap(),
+    val initialPositionMs: Long = 0L,
+    val videoDurationMs: Long = 0L,
+    val subtitleUrl: String? = null,
 )
 
 enum class ExternalPlayerOpenResult {
@@ -25,5 +29,7 @@ internal expect object ExternalPlayerPlatform {
     fun open(
         request: ExternalPlayerPlaybackRequest,
         playerId: String?,
+        onProgressUpdate: ((positionMs: Long) -> Unit)? = null,
+        onExit: ((lastPositionMs: Long) -> Unit)? = null,
     ): ExternalPlayerOpenResult
 }

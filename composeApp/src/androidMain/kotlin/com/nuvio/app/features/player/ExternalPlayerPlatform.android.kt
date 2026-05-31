@@ -26,6 +26,8 @@ internal actual object ExternalPlayerPlatform {
     actual fun open(
         request: ExternalPlayerPlaybackRequest,
         playerId: String?,
+        onProgressUpdate: ((positionMs: Long) -> Unit)?,
+        onExit: ((lastPositionMs: Long) -> Unit)?,
     ): ExternalPlayerOpenResult {
         val context = appContext ?: return ExternalPlayerOpenResult.Failed
         val uri = request.sourceUrl.toExternalPlaybackUri(context)

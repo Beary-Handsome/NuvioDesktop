@@ -66,6 +66,8 @@ internal actual object ExternalPlayerPlatform {
     actual fun open(
         request: ExternalPlayerPlaybackRequest,
         playerId: String?,
+        onProgressUpdate: ((positionMs: Long) -> Unit)?,
+        onExit: ((lastPositionMs: Long) -> Unit)?,
     ): ExternalPlayerOpenResult {
         if (playerId.isNullOrBlank()) return ExternalPlayerOpenResult.NotConfigured
         val spec = iosExternalPlayerSpecs.firstOrNull { it.id == playerId }

@@ -628,6 +628,8 @@ internal class MpvDesktopPlayerBackend private constructor(
                 val assOverrideMode = if (useExternalSubtitleStyle) ExternalSubtitleAssOverride else EmbeddedSubtitleAssOverride
                 val codepage = if (useExternalSubtitleStyle) ExternalSubtitleCodepage else EmbeddedSubtitleCodepage
 
+                val subDelaySecs = style.subtitleDelayMs / 1000.0
+
                 handle.setMpvRuntimeOption("sub-codepage", codepage)
                 handle.setMpvRuntimeOption("embeddedfonts", "yes")
                 handle.setMpvRuntimeOption("sub-ass-override", assOverrideMode)
@@ -636,12 +638,14 @@ internal class MpvDesktopPlayerBackend private constructor(
                 handle.setMpvRuntimeOption("sub-font-size", style.fontSizeSp.toDouble())
                 handle.setMpvRuntimeOption("sub-pos", subPos)
                 handle.setMpvRuntimeOption("sub-align-y", "bottom")
+                handle.setMpvRuntimeOption("sub-delay", subDelaySecs)
 
                 DesktopRuntimeLog.info(
                     "MPV applySubtitleStyle selected=${selectedTrack?.toLogString() ?: "none"} " +
                         "reason=$reason assOverride=$assOverrideMode codepage=$codepage " +
                         "embeddedfonts=yes externalActive=$externalSubtitleActive " +
-                        "appStyleTarget=${if (useExternalSubtitleStyle) "external-subtitle" else "embedded-plain-text"}",
+                        "appStyleTarget=${if (useExternalSubtitleStyle) "external-subtitle" else "embedded-plain-text"} " +
+                        "subDelay=${style.subtitleDelayMs}ms",
                 )
             }.onFailure { DesktopRuntimeLog.error("MPV applySubtitleStyle failed", it) }
         }

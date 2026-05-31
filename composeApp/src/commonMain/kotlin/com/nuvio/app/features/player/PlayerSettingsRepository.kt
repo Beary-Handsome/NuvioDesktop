@@ -99,6 +99,7 @@ object PlayerSettingsRepository {
     private var preferredSubtitleLanguage = SubtitleLanguageOption.NONE
     private var secondaryPreferredSubtitleLanguage: String? = null
     private var subtitleStyle = SubtitleStyleState.DEFAULT
+    private var subtitleDelayMs = 0
     private var streamReuseLastLinkEnabled = false
     private var streamReuseLastLinkCacheHours = 24
     private var decoderPriority = 1
@@ -160,6 +161,7 @@ object PlayerSettingsRepository {
         preferredSubtitleLanguage = SubtitleLanguageOption.NONE
         secondaryPreferredSubtitleLanguage = null
         subtitleStyle = SubtitleStyleState.DEFAULT
+        subtitleDelayMs = 0
         streamReuseLastLinkEnabled = false
         streamReuseLastLinkCacheHours = 24
         decoderPriority = 1
@@ -222,6 +224,7 @@ object PlayerSettingsRepository {
                 ?: SubtitleLanguageOption.NONE
         secondaryPreferredSubtitleLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredSubtitleLanguage())
+        subtitleDelayMs = PlayerSettingsStorage.loadSubtitleDelayMs() ?: 0
         subtitleStyle = SubtitleStyleState(
             textColor = subtitleColorFromStorage(PlayerSettingsStorage.loadSubtitleTextColor())
                 ?: SubtitleStyleState.DEFAULT.textColor,
@@ -231,6 +234,7 @@ object PlayerSettingsRepository {
                 ?: SubtitleStyleState.DEFAULT.fontSizeSp,
             bottomOffset = PlayerSettingsStorage.loadSubtitleBottomOffset()
                 ?: SubtitleStyleState.DEFAULT.bottomOffset,
+            subtitleDelayMs = subtitleDelayMs,
         )
         streamReuseLastLinkEnabled = PlayerSettingsStorage.loadStreamReuseLastLinkEnabled() ?: false
         streamReuseLastLinkCacheHours = PlayerSettingsStorage.loadStreamReuseLastLinkCacheHours() ?: 24
@@ -402,11 +406,23 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (subtitleStyle == style) return
         subtitleStyle = style
+        subtitleDelayMs = style.subtitleDelayMs
         publish()
         PlayerSettingsStorage.saveSubtitleTextColor(style.textColor.toStorageHexString())
         PlayerSettingsStorage.saveSubtitleOutlineEnabled(style.outlineEnabled)
         PlayerSettingsStorage.saveSubtitleFontSizeSp(style.fontSizeSp)
         PlayerSettingsStorage.saveSubtitleBottomOffset(style.bottomOffset)
+        PlayerSettingsStorage.saveSubtitleDelayMs(style.subtitleDelayMs)
+    }
+
+    fun setSubtitleDelayMs(delayMs: Int) {
+        ensureLoaded()
+        val clamped = delayMs.coerceIn(-10000, 10000)
+        if (subtitleDelayMs == clamped) return
+        subtitleDelayMs = clamped
+        subtitleStyle = subtitleStyle.copy(subtitleDelayMs = clamped)
+        publish()
+        PlayerSettingsStorage.saveSubtitleDelayMs(clamped)
     }
 
     fun setStreamReuseLastLinkEnabled(enabled: Boolean) {

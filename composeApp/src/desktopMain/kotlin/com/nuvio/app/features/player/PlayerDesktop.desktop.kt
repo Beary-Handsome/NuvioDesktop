@@ -524,6 +524,7 @@ internal actual object PlayerSettingsStorage {
     private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
     private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
     private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
+    private const val subtitleDelayMsKey = "subtitle_delay_ms"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
     private const val decoderPriorityKey = "decoder_priority"
@@ -565,6 +566,7 @@ internal actual object PlayerSettingsStorage {
         subtitleOutlineEnabledKey,
         subtitleFontSizeSpKey,
         subtitleBottomOffsetKey,
+        subtitleDelayMsKey,
         streamReuseLastLinkEnabledKey,
         streamReuseLastLinkCacheHoursKey,
         decoderPriorityKey,
@@ -687,6 +689,12 @@ internal actual object PlayerSettingsStorage {
 
     actual fun saveSubtitleBottomOffset(bottomOffset: Int) {
         saveInt(subtitleBottomOffsetKey, bottomOffset)
+    }
+
+    actual fun loadSubtitleDelayMs(): Int? = loadInt(subtitleDelayMsKey)
+
+    actual fun saveSubtitleDelayMs(delayMs: Int) {
+        saveInt(subtitleDelayMsKey, delayMs)
     }
 
     actual fun loadStreamReuseLastLinkEnabled(): Boolean? = loadBoolean(streamReuseLastLinkEnabledKey)

@@ -162,6 +162,33 @@ private fun StyleControlsCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Subtitle delay",
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            StepperControl(
+                value = formatDelayMs(style.subtitleDelayMs),
+                onMinus = {
+                    onStyleChanged(style.copy(subtitleDelayMs = (style.subtitleDelayMs - 100).coerceAtLeast(-10000)))
+                },
+                onPlus = {
+                    onStyleChanged(style.copy(subtitleDelayMs = (style.subtitleDelayMs + 100).coerceAtMost(10000)))
+                },
+                buttonSize = btnSize,
+                buttonRadius = btnRadius,
+                minWidth = 56.dp,
+                minusIcon = Icons.Rounded.KeyboardArrowDown,
+                plusIcon = Icons.Rounded.KeyboardArrowUp,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -281,6 +308,20 @@ private fun StepperControl(
                 modifier = Modifier.size(16.dp),
             )
         }
+    }
+}
+
+private fun formatDelayMs(delayMs: Int): String {
+    val absMs = kotlin.math.abs(delayMs)
+    val tenths = (absMs / 100) % 10
+    val wholeSecs = absMs / 1000
+    if (delayMs == 0) return "0s"
+    return buildString {
+        if (delayMs > 0) append('+')
+        append(wholeSecs)
+        append('.')
+        append(tenths)
+        append('s')
     }
 }
 

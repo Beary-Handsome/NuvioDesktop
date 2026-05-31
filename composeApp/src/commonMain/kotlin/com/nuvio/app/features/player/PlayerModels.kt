@@ -32,6 +32,7 @@ data class PlayerLaunch(
     val parentMetaType: String,
     val initialPositionMs: Long = 0L,
     val initialProgressFraction: Float? = null,
+    val videoDurationMs: Long = 0L,
 )
 
 object PlayerLaunchStore {

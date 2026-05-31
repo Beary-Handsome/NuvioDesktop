@@ -43,6 +43,7 @@ data class SubtitleStyleState(
     val outlineEnabled: Boolean = false,
     val fontSizeSp: Int = 18,
     val bottomOffset: Int = 20,
+    val subtitleDelayMs: Int = 0,
 ) {
     companion object {
         val DEFAULT = SubtitleStyleState()
