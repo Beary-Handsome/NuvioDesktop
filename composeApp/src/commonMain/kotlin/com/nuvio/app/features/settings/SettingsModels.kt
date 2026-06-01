@@ -25,6 +25,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
 import nuvio.composeapp.generated.resources.compose_settings_page_root
+import nuvio.composeapp.generated.resources.compose_settings_page_streams
 import nuvio.composeapp.generated.resources.compose_settings_page_supporters_contributors
 import nuvio.composeapp.generated.resources.compose_settings_page_tmdb_enrichment
 import nuvio.composeapp.generated.resources.compose_settings_page_trakt
@@ -112,6 +113,11 @@ internal enum class SettingsPage(
     ),
     MetaScreen(
         titleRes = Res.string.compose_settings_page_meta_screen,
+        category = SettingsCategory.General,
+        parentPage = ContentDiscovery,
+    ),
+    Streams(
+        titleRes = Res.string.compose_settings_page_streams,
         category = SettingsCategory.General,
         parentPage = ContentDiscovery,
     ),

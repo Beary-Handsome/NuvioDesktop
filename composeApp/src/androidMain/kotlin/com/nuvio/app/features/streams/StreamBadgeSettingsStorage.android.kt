@@ -1,16 +1,17 @@
-﻿package com.nuvio.app.features.streams
+package com.nuvio.app.features.streams
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.decodeSyncBoolean
 import com.nuvio.app.core.sync.decodeSyncString
 import com.nuvio.app.core.sync.encodeSyncBoolean
 import com.nuvio.app.core.sync.encodeSyncString
-import com.nuvio.app.desktop.DesktopPreferences
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal actual object StreamBadgeSettingsStorage {
+actual object StreamBadgeSettingsStorage {
     private const val preferencesName = "nuvio_stream_badge_settings"
     private const val legacyDebridPreferencesName = "nuvio_debrid_settings"
     private const val streamBadgeRulesKey = "stream_badge_rules"
@@ -18,6 +19,14 @@ internal actual object StreamBadgeSettingsStorage {
     private const val legacyDebridStreamBadgeRulesKey = "debrid_stream_badge_rules"
 
     private val syncKeys = listOf(streamBadgeRulesKey, showFileSizeBadgesKey)
+
+    private var preferences: SharedPreferences? = null
+    private var legacyDebridPreferences: SharedPreferences? = null
+
+    fun initialize(context: Context) {
+        preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+        legacyDebridPreferences = context.getSharedPreferences(legacyDebridPreferencesName, Context.MODE_PRIVATE)
+    }
 
     actual fun loadStreamBadgeRules(): String? = loadString(streamBadgeRulesKey)
 
@@ -32,24 +41,40 @@ internal actual object StreamBadgeSettingsStorage {
     }
 
     actual fun loadLegacyDebridStreamBadgeRules(): String? =
-        DesktopPreferences.getString(legacyDebridPreferencesName, ProfileScopedKey.of(legacyDebridStreamBadgeRulesKey))
+        legacyDebridPreferences?.getString(ProfileScopedKey.of(legacyDebridStreamBadgeRulesKey), null)
 
     actual fun clearLegacyDebridStreamBadgeRules() {
-        DesktopPreferences.remove(legacyDebridPreferencesName, ProfileScopedKey.of(legacyDebridStreamBadgeRulesKey))
+        legacyDebridPreferences
+            ?.edit()
+            ?.remove(ProfileScopedKey.of(legacyDebridStreamBadgeRulesKey))
+            ?.apply()
     }
 
     private fun loadString(key: String): String? =
-        DesktopPreferences.getString(preferencesName, ProfileScopedKey.of(key))
+        preferences?.getString(ProfileScopedKey.of(key), null)
 
     private fun saveString(key: String, value: String) {
-        DesktopPreferences.putString(preferencesName, ProfileScopedKey.of(key), value)
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(key), value)
+            ?.apply()
     }
 
     private fun loadBoolean(key: String): Boolean? =
-        DesktopPreferences.getBoolean(preferencesName, ProfileScopedKey.of(key))
+        preferences?.let { sharedPreferences ->
+            val scopedKey = ProfileScopedKey.of(key)
+            if (sharedPreferences.contains(scopedKey)) {
+                sharedPreferences.getBoolean(scopedKey, false)
+            } else {
+                null
+            }
+        }
 
-    private fun saveBoolean(key: String, value: Boolean) {
-        DesktopPreferences.putBoolean(preferencesName, ProfileScopedKey.of(key), value)
+    private fun saveBoolean(key: String, enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(key), enabled)
+            ?.apply()
     }
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
@@ -58,9 +83,10 @@ internal actual object StreamBadgeSettingsStorage {
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
-        syncKeys.forEach { key ->
-            DesktopPreferences.remove(preferencesName, ProfileScopedKey.of(key))
-        }
+        preferences?.edit()?.apply {
+            syncKeys.forEach { remove(ProfileScopedKey.of(it)) }
+        }?.apply()
+
         payload.decodeSyncString(streamBadgeRulesKey)?.let(::saveStreamBadgeRules)
         payload.decodeSyncBoolean(showFileSizeBadgesKey)?.let(::saveShowFileSizeBadges)
     }

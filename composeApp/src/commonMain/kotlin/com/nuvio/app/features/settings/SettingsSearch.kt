@@ -405,6 +405,32 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_content_discovery_meta_screen_description),
         icon = Icons.Rounded.Tune,
     )
+    val streamsPage = stringResource(Res.string.compose_settings_page_streams)
+    addPage(
+        page = SettingsPage.Streams,
+        key = "streams",
+        title = streamsPage,
+        description = stringResource(Res.string.settings_stream_badge_urls_search_description),
+        icon = Icons.Rounded.Style,
+    )
+    addRow(
+        page = SettingsPage.Streams,
+        key = "stream-size-badges",
+        title = stringResource(Res.string.settings_stream_size_badges_title),
+        description = stringResource(Res.string.settings_stream_size_badges_description),
+        pageLabel = streamsPage,
+        section = stringResource(Res.string.settings_stream_badges_section),
+        icon = Icons.Rounded.Style,
+    )
+    addRow(
+        page = SettingsPage.Streams,
+        key = "stream-badge-urls",
+        title = stringResource(Res.string.settings_stream_badge_urls_title),
+        description = stringResource(Res.string.settings_stream_badge_urls_search_description),
+        pageLabel = streamsPage,
+        section = stringResource(Res.string.settings_stream_badges_section),
+        icon = Icons.Rounded.Style,
+    )
     add(
         key = "collections",
         title = collectionsPage,

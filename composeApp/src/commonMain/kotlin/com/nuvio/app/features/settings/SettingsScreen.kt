@@ -502,6 +502,7 @@ private fun MobileSettingsScreen(
                         settingsRootContent(
                             isTablet = false,
                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
+                            onStreamsClick = { onPageChange(SettingsPage.Streams) },
                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
@@ -598,6 +599,9 @@ private fun MobileSettingsScreen(
                 SettingsPage.MetaScreen -> metaScreenSettingsContent(
                     isTablet = false,
                     uiState = metaScreenSettingsUiState,
+                )
+                SettingsPage.Streams -> streamsSettingsContent(
+                    isTablet = false,
                 )
                 SettingsPage.Integrations -> integrationsContent(
                     isTablet = false,
@@ -875,6 +879,7 @@ private fun TabletSettingsScreen(
                             settingsRootContent(
                                 isTablet = true,
                                 onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                                onStreamsClick = { openInlinePage(SettingsPage.Streams) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                                 onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
                                 onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
@@ -974,6 +979,9 @@ private fun TabletSettingsScreen(
                     SettingsPage.MetaScreen -> metaScreenSettingsContent(
                         isTablet = true,
                         uiState = metaScreenSettingsUiState,
+                    )
+                    SettingsPage.Streams -> streamsSettingsContent(
+                        isTablet = true,
                     )
                     SettingsPage.Integrations -> integrationsContent(
                         isTablet = true,
