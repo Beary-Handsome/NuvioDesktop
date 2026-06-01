@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
+import com.nuvio.app.core.imaging.WicCoilImageDecoder
 import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.desktop.DesktopPreferences
 import kotlin.system.exitProcess
@@ -44,7 +45,17 @@ actual fun appIconPainter(icon: AppIconResource): Painter =
         }
     )
 
-internal actual fun ImageLoader.Builder.configurePlatformImageLoader(): ImageLoader.Builder = this
+private val isWindowsDesktop: Boolean by lazy {
+    System.getProperty("os.name")?.contains("Windows", ignoreCase = true) == true
+}
+
+internal actual fun ImageLoader.Builder.configurePlatformImageLoader(): ImageLoader.Builder {
+    if (!isWindowsDesktop) return this
+    if (!WindowsImageRenderingPreference.nativeWicEnabled) return this
+    return components {
+        add(WicCoilImageDecoder.Factory())
+    }
+}
 
 actual fun platformExitApp() {
     exitProcess(0)

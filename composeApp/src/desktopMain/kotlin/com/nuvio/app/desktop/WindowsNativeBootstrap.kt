@@ -12,6 +12,8 @@ internal object WindowsNativeBootstrap {
     private const val LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400
     private const val DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4L
     private const val PROCESS_PER_MONITOR_DPI_AWARE = 2
+    private const val MDT_EFFECTIVE_DPI = 0
+    private const val MONITOR_DEFAULTTOPRIMARY = 1
 
     private val isWindows: Boolean
         get() = System.getProperty("os.name")?.contains("Windows", ignoreCase = true) == true
@@ -30,6 +32,8 @@ internal object WindowsNativeBootstrap {
             return
         }
         dpiAwarenessConfigured = true
+
+        primeJava2dUiScale()
 
         val user32 = runCatching { Native.load("user32", User32::class.java) }
             .onFailure { DesktopRuntimeLog.error("dpiAwareness failed: cannot load user32", it) }
@@ -66,6 +70,59 @@ internal object WindowsNativeBootstrap {
         }
     }
 
+    private fun primeJava2dUiScale() {
+        if (System.getProperty("sun.java2d.uiScale.enabled") == null) {
+            System.setProperty("sun.java2d.uiScale.enabled", "true")
+        }
+        if (System.getProperty("sun.java2d.dpiaware") == null) {
+            System.setProperty("sun.java2d.dpiaware", "true")
+        }
+        if (System.getProperty("sun.java2d.uiScale") != null) {
+            DesktopRuntimeLog.info(
+                "uiScale: honoring user-provided sun.java2d.uiScale=${System.getProperty("sun.java2d.uiScale")}",
+            )
+            return
+        }
+
+        val scale = detectPrimaryMonitorScale()
+        if (scale != null) {
+            val rounded = (Math.round(scale * 20f) / 20f).coerceAtLeast(1.0f)
+            System.setProperty("sun.java2d.uiScale", rounded.toString())
+            DesktopRuntimeLog.info(
+                "uiScale: detected primary-monitor scale=$scale rounded=$rounded sun.java2d.uiScale set",
+            )
+        } else {
+            DesktopRuntimeLog.info("uiScale: could not detect monitor scale; leaving sun.java2d.uiScale unset")
+        }
+    }
+
+    private fun detectPrimaryMonitorScale(): Float? {
+        val user32 = runCatching { Native.load("user32", User32::class.java) }
+            .onFailure { DesktopRuntimeLog.warn("uiScale: cannot load user32 ${it::class.simpleName}:${it.message}") }
+            .getOrNull() ?: return null
+        val shcore = runCatching { Native.load("shcore", Shcore::class.java) }
+            .onFailure { DesktopRuntimeLog.warn("uiScale: cannot load shcore ${it::class.simpleName}:${it.message}") }
+            .getOrNull() ?: return null
+
+        val primaryMonitor = runCatching { user32.MonitorFromWindow(Pointer.NULL, MONITOR_DEFAULTTOPRIMARY) }
+            .onFailure { DesktopRuntimeLog.warn("uiScale: MonitorFromWindow threw ${it::class.simpleName}:${it.message}") }
+            .getOrNull() ?: return null
+        if (primaryMonitor == Pointer.NULL) return null
+
+        val dpiX = com.sun.jna.ptr.IntByReference()
+        val dpiY = com.sun.jna.ptr.IntByReference()
+        val hr = runCatching { shcore.GetDpiForMonitor(primaryMonitor, MDT_EFFECTIVE_DPI, dpiX, dpiY) }
+            .onFailure { DesktopRuntimeLog.warn("uiScale: GetDpiForMonitor threw ${it::class.simpleName}:${it.message}") }
+            .getOrNull() ?: return null
+        if (hr != 0) {
+            DesktopRuntimeLog.warn("uiScale: GetDpiForMonitor hr=$hr")
+            return null
+        }
+        val effectiveDpi = maxOf(dpiX.value, dpiY.value)
+        if (effectiveDpi <= 0) return null
+        return effectiveDpi / 96.0f
+    }
+
     @Synchronized
     fun bootstrap() {
         if (!isWindows) {
@@ -78,7 +135,10 @@ internal object WindowsNativeBootstrap {
         }
 
         val nativeDir = resolveNativeDir()
-        DesktopRuntimeLog.info("nativeBootstrap mode=${nativeDir?.mode ?: "unresolved"} nativeDir=${nativeDir?.dir?.safePath() ?: "unresolved"}")
+        DesktopRuntimeLog.info(
+            "nativeBootstrap mode=${nativeDir?.mode ?: "unresolved"} " +
+                "nativeDir=${nativeDir?.dir?.safePath() ?: "unresolved"}",
+        )
         val nativeDirectory = nativeDir?.dir
         if (nativeDirectory == null || !nativeDirectory.isDirectory) {
             DesktopRuntimeLog.error("nativeBootstrap failed: native directory not found")
@@ -130,6 +190,29 @@ internal object WindowsNativeBootstrap {
             DesktopRuntimeLog.info("nativeBootstrap System.load success dll=${mediampDll.safePath()}")
         }.onFailure {
             DesktopRuntimeLog.error("nativeBootstrap System.load failed dll=${mediampDll.safePath()}", it)
+        }
+
+        preloadImageBridge(nativeDirectory)
+    }
+
+    private fun preloadImageBridge(nativeDirectory: File) {
+        val bridgeDll = nativeDirectory.resolve("NuvioImageBridge.dll")
+        if (!bridgeDll.isFile) {
+            DesktopRuntimeLog.warn(
+                "nativeBootstrap NuvioImageBridge.dll missing at ${bridgeDll.safePath()}; " +
+                    "WIC decoder will fall back to the default Coil decoder",
+            )
+            return
+        }
+        runCatching {
+            System.load(bridgeDll.absolutePath)
+        }.onSuccess {
+            DesktopRuntimeLog.info("nativeBootstrap NuvioImageBridge.dll loaded dll=${bridgeDll.safePath()}")
+        }.onFailure {
+            DesktopRuntimeLog.warn(
+                "nativeBootstrap NuvioImageBridge.dll load failed dll=${bridgeDll.safePath()} " +
+                    "(${it::class.simpleName}:${it.message}); WIC decoder will fall back to the default Coil decoder",
+            )
         }
     }
 
@@ -196,9 +279,16 @@ internal object WindowsNativeBootstrap {
     private interface User32 : StdCallLibrary, Library {
         fun SetProcessDpiAwarenessContext(value: Pointer): Boolean
         fun SetProcessDPIAware(): Boolean
+        fun MonitorFromWindow(hwnd: Pointer?, dwFlags: Int): Pointer?
     }
 
     private interface Shcore : StdCallLibrary, Library {
         fun SetProcessDpiAwareness(value: Int): Int
+        fun GetDpiForMonitor(
+            hMonitor: Pointer?,
+            dpiType: Int,
+            dpiX: com.sun.jna.ptr.IntByReference,
+            dpiY: com.sun.jna.ptr.IntByReference,
+        ): Int
     }
 }

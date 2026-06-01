@@ -11,7 +11,28 @@ import coil3.size.Precision
 import coil3.size.Size
 import kotlin.math.roundToInt
 
-internal val NuvioImageFilterQuality: FilterQuality = FilterQuality.High
+/**
+ * Per-platform sampler used by every Coil/AsyncImage call site.
+ *
+ * [FilterQuality.High] (Skia Mitchell bicubic) on **all** targets — Android, iOS,
+ * macOS/Linux Desktop, and Windows Desktop. There is no per-platform override.
+ *
+ * Why the sampler is the same everywhere: the sampler only matters when Skia has to
+ * resample at draw time. The Windows "crispy"/ringy artifact was never a sampler
+ * problem — on Windows, Compose Multiplatform is pinned to Skiko's OpenGL backend
+ * (libmpv shares its GL context with Skiko, see `composeApp/build.gradle.kts`
+ * `-Dskiko.renderApi=OPENGL`), and the real cause was handing Skia a bitmap larger
+ * than the pixel draw size, which forced a draw-time downscale. The fix removes the
+ * resample at its source: the Windows decode dimension is matched to the measured
+ * draw size and a native WIC decoder owns the downscale (HighQualityCubic), so Skia
+ * receives a bitmap already at the draw size and only blits ~1:1.
+ *
+ * Once Skia blits 1:1 (decode dimension == draw size), the sampler is irrelevant —
+ * there is no resample for it to influence. Earlier investigation considered a
+ * Windows-only [FilterQuality.Medium] override (linear + nearest mipmap); it was
+ * ruled out and never shipped. [FilterQuality.High] is kept on every target.
+ */
+internal expect val NuvioImageFilterQuality: FilterQuality
 
 internal expect fun nuvioQualityDecodeDimensionPx(displayDimensionPx: Int): Int
 
