@@ -19,6 +19,7 @@ data class StreamItem(
     val behaviorHints: StreamBehaviorHints = StreamBehaviorHints(),
     val clientResolve: StreamClientResolve? = null,
     val debridCacheStatus: StreamDebridCacheStatus? = null,
+    val badges: List<StreamBadge> = emptyList(),
 ) {
     val streamLabel: String
         get() = name ?: runBlocking { getString(Res.string.stream_default_name) }
