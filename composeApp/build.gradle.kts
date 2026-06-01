@@ -606,6 +606,7 @@ kotlin {
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
                 implementation(libs.jna)
+                implementation(libs.jamepad)
                 implementation("net.java.dev.jna:jna-platform:5.14.0")
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation("org.openani.mediamp:mediamp-api:0.1.0-dev-1")
@@ -695,6 +696,16 @@ compose.desktop {
                 mediampNativeBuildDir.resolve("Release").safePath(),
                 mediampPrebuiltDir.safePath(),
                 System.getenv("NUVIO_MPV_DIR")?.let { "$it/bin" } ?: "",
+                // Linux-specific paths for system libraries
+                if (System.getProperty("os.name").lowercase().contains("nux")) {
+                    listOf(
+                        "/usr/lib/x86_64-linux-gnu",
+                        "/usr/lib64",
+                        "/usr/local/lib",
+                        "/usr/local/lib/x86_64-linux-gnu",
+                        mediampRootDir.resolve("mediamp-mpv/libmpv/lib/linux/x86_64").absolutePath
+                    ).joinToString(File.pathSeparator)
+                } else "",
             ).filter { it.isNotEmpty() }.joinToString(System.getProperty("path.separator")),
         )
 

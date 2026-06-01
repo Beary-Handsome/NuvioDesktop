@@ -2,6 +2,7 @@ package com.nuvio.app
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
@@ -17,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.network.SupabaseConfig
+import com.nuvio.app.desktop.GamepadNavigationHandler
 import com.nuvio.app.desktop.DesktopSingleInstanceManager
 import com.nuvio.app.desktop.DesktopBorderlessFullscreenController
 import com.nuvio.app.desktop.DesktopPlayerRegistry
@@ -218,6 +220,11 @@ fun main(args: Array<String>) {
                         fontScale = currentDensity.fontScale * scaleFactor
                     )
                 ) {
+                    val gamepadClickAction = remember { mutableStateOf<(() -> Unit)?>(null) }
+                    GamepadNavigationHandler(
+                        window = window,
+                        gamepadClickAction = gamepadClickAction,
+                    )
                     App()
                 }
             }
