@@ -253,6 +253,29 @@ private fun detectAppImageMediaPlayers(
     }
 }
 
+internal val linuxDesktopPlayerDefinitions: List<DesktopPlayerDefinition> = listOf(
+    DesktopPlayerDefinition(id = "vlc", name = "VLC", kind = DesktopPlayerKind.Vlc),
+    DesktopPlayerDefinition(id = "mpv", name = "mpv", kind = DesktopPlayerKind.Mpv),
+    DesktopPlayerDefinition(id = "kodi", name = "Kodi", kind = DesktopPlayerKind.Kodi),
+    DesktopPlayerDefinition(id = "kodi-standalone", name = "Kodi (standalone)", kind = DesktopPlayerKind.Kodi),
+)
+
+internal fun LinuxExternalPlayerInstall.toDesktopPlayerInstall(): DesktopPlayerInstall {
+    val kind = when {
+        id.contains("vlc", ignoreCase = true) -> DesktopPlayerKind.Vlc
+        id.contains("mpv", ignoreCase = true) || id.contains("mpv", ignoreCase = true) -> DesktopPlayerKind.Mpv
+        id.contains("kodi", ignoreCase = true) -> DesktopPlayerKind.Kodi
+        executablePath.contains("vlc", ignoreCase = true) -> DesktopPlayerKind.Vlc
+        executablePath.contains("mpv", ignoreCase = true) -> DesktopPlayerKind.Mpv
+        executablePath.contains("kodi", ignoreCase = true) -> DesktopPlayerKind.Kodi
+        else -> DesktopPlayerKind.Mpv
+    }
+    return DesktopPlayerInstall(
+        definition = DesktopPlayerDefinition(id = id, name = name, kind = kind),
+        executablePath = executablePath,
+    )
+}
+
 private fun Map<String, String>.toLinuxMpvHeaderFields(): String? {
     val headers = mapNotNull { (rawName, rawValue) ->
         val name = rawName.trim()

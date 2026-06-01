@@ -12,14 +12,14 @@ internal actual object ExternalPlayerPlatform {
     }
 
     private val allDefinitions: List<DesktopPlayerDefinition> by lazy {
-        if (isWindows) windowsDesktopPlayerDefinitions else linuxExternalPlayerDefinitions
+        if (isWindows) windowsDesktopPlayerDefinitions else linuxDesktopPlayerDefinitions
     }
 
     private val detectedPlayers: List<DesktopPlayerInstall> by lazy {
         val players = if (isWindows) {
             detectWindowsExternalPlayers().map { it.toDesktopPlayerInstall() }
         } else {
-            detectLinuxExternalPlayers()
+            detectLinuxExternalPlayers().map { it.toDesktopPlayerInstall() }
         }
         DesktopRuntimeLog.info(
             "externalPlayer detection complete count=${players.size} ids=${players.joinToString { it.definition.id }}",
