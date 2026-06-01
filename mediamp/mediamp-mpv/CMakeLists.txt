@@ -151,11 +151,11 @@ else()
                 ${LIBAVFILTER_LIB}
                 EGL GL dl)
     else()
-        target_link_directories(${PROJECT_NAME} PRIVATE "${MPV_LIB_PATH}")
         target_link_libraries(${PROJECT_NAME} PRIVATE
                 ${FILTERED_JNI_LIBRARIES}
-                avcodec swscale mpv
-                avformat avutil swresample avfilter)
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVCODEC_NAME}"
+                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_SWSCALE_NAME}"
+                "${MPV_LIB_PATH}/${MPV_LIB_NAME}")
     endif()
     
     if(WIN32)

@@ -664,7 +664,6 @@
     <string name="settings_debrid_description_template_description">Controls the metadata shown under each result. Leave blank to use the original result details.</string>
     <string name="settings_debrid_formatter_reset_title">Reset formatting</string>
     <string name="settings_debrid_formatter_reset_subtitle">Restore default result formatting.</string>
-    <string name="compose_settings_page_streams">Streams</string>
     <string name="settings_stream_badges_section">Fusion Style</string>
     <string name="settings_stream_size_badges_title">Size badges</string>
     <string name="settings_stream_size_badges_description">Show file size badges in stream results and player source panels.</string>
@@ -918,6 +917,10 @@
     <string name="settings_playback_section_subtitle_audio">SUBTITLE AND AUDIO</string>
     <string name="settings_playback_section_subtitle_rendering">SUBTITLE RENDERING</string>
     <string name="settings_playback_selected_count">%1$d selected</string>
+    <string name="settings_playback_player_backend">Player backend</string>
+    <string name="settings_playback_player_backend_mpv">MPV (libmpv)</string>
+    <string name="settings_playback_player_backend_vlc">VLC (libvlc)</string>
+    <string name="settings_playback_player_backend_auto">Auto</string>
     <string name="settings_playback_show_loading_overlay">Loading Overlay</string>
     <string name="settings_playback_show_loading_overlay_description">Show loading screen until first video frame appears.</string>
     <string name="settings_playback_subtitle_background_color">Background Color</string>
