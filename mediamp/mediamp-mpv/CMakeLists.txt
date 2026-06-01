@@ -58,14 +58,32 @@ elseif(ANDROID)
 elseif(UNIX AND NOT APPLE)
     # Linux
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(MPV_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libmpv/lib/linux/x86_64")
-        set(MPV_LIB_NAME "libmpv.so")
-        set(MPV_LIB_EXTERNAL_AVCODEC_NAME "libavcodec.so")
-        set(MPV_LIB_EXTERNAL_SWSCALE_NAME "libswscale.so")
-        set(MPV_LIB_EXTERNAL_AVFORMAT_NAME "libavformat.so")
-        set(MPV_LIB_EXTERNAL_AVUTIL_NAME "libavutil.so")
-        set(MPV_LIB_EXTERNAL_SWRESAMPLE_NAME "libswresample.so")
-        set(MPV_LIB_EXTERNAL_AVFILTER_NAME "libavfilter.so")
+        # First try to find system libraries, fallback to bundled
+        find_library(LIBMPV_LIB NAMES mpv PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBAVCODEC_LIB NAMES avcodec PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBAVFORMAT_LIB NAMES avformat PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBAVUTIL_LIB NAMES avutil PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBSWSCALE_LIB NAMES swscale PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBSWRESAMPLE_LIB NAMES swresample PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        find_library(LIBAVFILTER_LIB NAMES avfilter PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 NO_DEFAULT_PATH QUIET)
+        
+        if(NOT LIBMPV_LIB)
+            # Fallback to bundled libraries
+            set(MPV_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libmpv/lib/linux/x86_64")
+            set(MPV_LIB_NAME "libmpv.so")
+            set(MPV_LIB_EXTERNAL_AVCODEC_NAME "libavcodec.so")
+            set(MPV_LIB_EXTERNAL_SWSCALE_NAME "libswscale.so")
+        else()
+            # Use system libraries - set dummy names since we'll use full paths
+            set(MPV_LIB_PATH "")
+            set(MPV_LIB_NAME "")
+            set(MPV_LIB_EXTERNAL_AVCODEC_NAME "")
+            set(MPV_LIB_EXTERNAL_SWSCALE_NAME "")
+            set(MPV_LIB_EXTERNAL_AVFORMAT_NAME "")
+            set(MPV_LIB_EXTERNAL_AVUTIL_NAME "")
+            set(MPV_LIB_EXTERNAL_SWRESAMPLE_NAME "")
+            set(MPV_LIB_EXTERNAL_AVFILTER_NAME "")
+        endif()
     else()
         message(FATAL_ERROR "only support x86_64 on Linux")
     endif()
@@ -120,20 +138,34 @@ else()
         endif()
     endforeach()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-            ${FILTERED_JNI_LIBRARIES}
-            "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVCODEC_NAME}"
-            "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_SWSCALE_NAME}"
-            "${MPV_LIB_PATH}/${MPV_LIB_NAME}")
+    # For Linux, use system libraries if available
+    if(UNIX AND NOT APPLE AND LIBMPV_LIB)
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+                ${FILTERED_JNI_LIBRARIES}
+                ${LIBMPV_LIB}
+                ${LIBAVCODEC_LIB}
+                ${LIBSWSCALE_LIB}
+                ${LIBAVFORMAT_LIB}
+                ${LIBAVUTIL_LIB}
+                ${LIBSWRESAMPLE_LIB}
+                ${LIBAVFILTER_LIB}
+                EGL GL dl)
+    else()
+        target_link_directories(${PROJECT_NAME} PRIVATE "${MPV_LIB_PATH}")
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+                ${FILTERED_JNI_LIBRARIES}
+                avcodec swscale mpv
+                avformat avutil swresample avfilter)
+    endif()
+    
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE
                 opengl32)
-    elseif(UNIX AND NOT APPLE)
+    elseif(NOT (UNIX AND NOT APPLE))
+        # macOS
+    elseif(NOT LIBMPV_LIB)
+        # Linux with bundled libraries
         target_link_libraries(${PROJECT_NAME} PRIVATE
-                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVFORMAT_NAME}"
-                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVUTIL_NAME}"
-                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_SWRESAMPLE_NAME}"
-                "${MPV_LIB_PATH}/${MPV_LIB_EXTERNAL_AVFILTER_NAME}"
                 EGL GL dl)
     endif()
 endif()

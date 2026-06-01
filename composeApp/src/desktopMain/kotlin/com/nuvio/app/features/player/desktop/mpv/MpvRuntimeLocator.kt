@@ -48,9 +48,20 @@ internal object MpvRuntimeLocator {
         }
 
         if (isOsLinux()) {
+            // Primary mediamp locations
             add("linux:/usr/lib/x86_64-linux-gnu/mediamp", File("/usr/lib/x86_64-linux-gnu/mediamp"))
             add("linux:/usr/local/lib/mediamp", File("/usr/local/lib/mediamp"))
             add("linux:/usr/lib/mediamp", File("/usr/lib/mediamp"))
+            add("linux:/usr/lib64/mediamp", File("/usr/lib64/mediamp"))
+            
+            // Flatpak and Snap environments
+            add("linux:${'$'}HOME/.local/share/Nuvio/native", System.getenv("HOME")?.let { File("$it/.local/share/Nuvio/native") })
+            add("linux:/var/lib/snapd/snap/nuvio/current/native", File("/var/lib/snapd/snap/nuvio/current/native"))
+            
+            // AppImage and portable distributions
+            add("linux:${'$'}APPDIR/native", System.getenv("APPDIR")?.let { File("$it/native") })
+            
+            // LD_LIBRARY_PATH for all system libraries
             add("env:LD_LIBRARY_PATH", System.getenv("LD_LIBRARY_PATH")?.toFileOrNull())
         }
 

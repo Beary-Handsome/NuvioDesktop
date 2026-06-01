@@ -176,12 +176,24 @@ actual class MpvMediampPlayer(
                 val isWayland = System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
                 val hasX11Display = System.getenv("DISPLAY")?.isNotEmpty() == true
                 val useWaylandEGL = isWayland && !hasX11Display
+                val gpuContext = when {
+                    useWaylandEGL -> "wayland"
+                    hasX11Display -> "x11egl"
+                    else -> "auto"
+                }
+                
                 handle.option("ao", if (useWaylandEGL) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
                 handle.option("vo", "libmpv")
                 handle.option("fbo-format", "rgba8")
-                handle.option("gpu-context", if (useWaylandEGL) "wayland" else "x11egl")
+                handle.option("gpu-context", gpuContext)
+                handle.option("vulkan-device-index", "0") // Use first GPU (important for multi-GPU setups)
+                
+                // NVIDIA optimization: Enable VDPAU and VA-API
+                handle.option("hwdec-extra-hw-frames", "16")
+                
                 // Some VA-API drivers corrupt HEVC frames; restrict to known-safe codecs
-                hardwareDecoderCodecs = "h264,mpeg4,mpeg2video,vp8,vp9,av1"
+                // NVIDIA supports all these codecs efficiently
+                hardwareDecoderCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1"
             }
 
             else -> {}
