@@ -511,6 +511,10 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
                     )
+                    if (isDesktop) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        DesktopDecoderSettingsSection(isTablet = isTablet)
+                    }
                 }
             }
         }
