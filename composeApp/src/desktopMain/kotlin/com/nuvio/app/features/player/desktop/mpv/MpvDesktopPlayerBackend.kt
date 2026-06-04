@@ -101,7 +101,21 @@ internal class MpvDesktopPlayerBackend private constructor(
         observePlaybackSettings()
         applyDecoderSettings()
         applyCursorSettings()
+        val initialTuning = loadDesktopMpvVideoTuning()
+        val effectiveHwdec = if (isOsLinux() &&
+            System.getProperty("nuvio.mpv.diagnostic.hwdec") == null &&
+            System.getenv("NUVIO_MPV_DIAGNOSTIC_HWDEC") == null
+        ) "no(linux-forced)" else initialTuning.settings.hardwareDecoderMode.mpvValue
+        val marker = "NUVIO_BUILD_MARKER_LINUX_2026_06_03_HLSFIX_V3"
+        DesktopRuntimeLog.info("$marker $marker $marker")
+        DesktopRuntimeLog.info(
+            "MPV backend init os=${System.getProperty("os.name")} " +
+                "hwdecMode=${initialTuning.settings.hardwareDecoderMode} " +
+                "effectiveHwdec=$effectiveHwdec",
+        )
         DesktopRuntimeLog.info("MPV backend created id=$id runtime=${runtime.directory?.safePath() ?: "none"}")
+        System.err.println("[$marker] effectiveHwdec=$effectiveHwdec")
+        System.err.flush()
     }
 
     override suspend fun load(request: DesktopPlayerRequest) {
@@ -117,6 +131,7 @@ internal class MpvDesktopPlayerBackend private constructor(
         stopped = false
         stateFlow.value = stateFlow.value.copy(phase = DesktopPlayerPhase.Preparing, error = null)
         applyHwdecAtLoad()
+        applyHlsSpecificOptionsIfNeeded(request.sourceUrl)
         runCatching {
             val headers = request.sourceHeaders.toMutableMap()
             DesktopRuntimeLog.info(
@@ -353,12 +368,40 @@ internal class MpvDesktopPlayerBackend private constructor(
 
     private fun applyHwdecAtLoad() {
         val hwdecTuning = loadDesktopMpvVideoTuning()
-        mpvRuntimeOptions(hwdecTuning)
-            .filter { it.name == "hwdec" }
-            .forEach { option ->
-                runCatching { mpvHandle.setMpvRuntimeOption(option.name, option.value) }
-                    .onFailure { DesktopRuntimeLog.warn("MPV hwdec apply at load failed message=${it.message}") }
-            }
+        val targets = mpvRuntimeOptions(hwdecTuning).filter { it.name == "hwdec" }
+        targets.forEach { option ->
+            val applied = runCatching { mpvHandle.setMpvRuntimeOption(option.name, option.value) }
+                .onFailure { DesktopRuntimeLog.warn("MPV hwdec apply at load failed message=${it.message}") }
+                .getOrDefault(false)
+            val actual = runCatching { mpvHandle.getMpvStringPropertyOrNull("hwdec") }.getOrNull() ?: "<unknown>"
+            DesktopRuntimeLog.info("MPV hwdec apply target=${option.value} applied=$applied actual=$actual")
+        }
+    }
+
+    private fun applyHlsSpecificOptionsIfNeeded(sourceUrl: String) {
+        if (nativeClosed) return
+        val isHls = sourceUrl.contains(".m3u8", ignoreCase = true) ||
+            sourceUrl.contains("m3u8", ignoreCase = true)
+        if (!isHls) return
+        val overrides = listOf(
+            "cache" to "no",
+            "cache-pause" to "no",
+            "demuxer-cache-secs" to "0",
+            "force-seekable" to "no",
+            "errordetect" to "ignore_err",
+            "framedrop" to "decoder+vo",
+            "demuxer-lavf-o" to "fflags=+discardcorrupt",
+        )
+        val applied = mutableListOf<String>()
+        overrides.forEach { (name, value) ->
+            val ok = runCatching { mpvHandle.setMpvRuntimeOption(name, value) }
+                .onFailure { DesktopRuntimeLog.warn("MPV HLS override $name=$value failed message=${it.message}") }
+                .getOrDefault(false)
+            if (ok) applied.add("$name=$value")
+        }
+        DesktopRuntimeLog.info("MPV HLS overrides applied=${applied.joinToString(",")}")
+        System.err.println("[NUVIO_BUILD_MARKER_LINUX_2026_06_03_HLSFIX_V3] HLS overrides applied=${applied.joinToString(",")}")
+        System.err.flush()
     }
 
     private fun applyCursorSettings() {

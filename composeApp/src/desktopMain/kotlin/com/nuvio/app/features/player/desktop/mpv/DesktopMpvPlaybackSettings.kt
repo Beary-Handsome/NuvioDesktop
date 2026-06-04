@@ -194,9 +194,20 @@ internal fun mpvRuntimeOptions(tuning: DesktopMpvVideoTuning): List<MpvRuntimeOp
         PlayerVideoOutputPreset.ToneMappedSdr -> "203"
         else -> "auto"
     }
+    // Linux ships without a working VA-API/CUDA/Vulkan video decode stack in
+    // most desktop environments. When the user has hwdec=auto or a specific
+    // codec enabled, mpv spams init errors (CUDA_ERROR_NO_DEVICE, VK_KHR_video
+    // decode unsupported, etc.) and may stall. Force software decode on Linux
+    // unless the user explicitly opted in via NUVIO_MPV_DIAGNOSTIC_HWDEC.
+    val hwdecValue = when {
+        isOsLinux() &&
+            System.getProperty("nuvio.mpv.diagnostic.hwdec") == null &&
+            System.getenv("NUVIO_MPV_DIAGNOSTIC_HWDEC") == null -> "no"
+        else -> settings.hardwareDecoderMode.mpvValue
+    }
     return listOf(
         *stremioBaselineRuntimeOptions().toTypedArray(),
-        MpvRuntimeOption("hwdec", settings.hardwareDecoderMode.mpvValue),
+        MpvRuntimeOption("hwdec", hwdecValue),
         MpvRuntimeOption("tone-mapping", settings.toneMappingMode.mpvValue),
         MpvRuntimeOption("hdr-compute-peak", if (settings.hdrComputePeakEnabled) "auto" else "no"),
         MpvRuntimeOption("target-prim", settings.targetPrimaries.mpvValue),
@@ -216,13 +227,46 @@ internal fun mpvRuntimeOptions(tuning: DesktopMpvVideoTuning): List<MpvRuntimeOp
 
 internal fun stremioBaselineRuntimeOptions(): List<MpvRuntimeOption> =
     listOf(
-        MpvRuntimeOption("demuxer-lavf-probesize", "524288"),
-        MpvRuntimeOption("demuxer-lavf-analyzeduration", "0.5"),
+        // Probesize/analyzeduration: defaults are 5MB/~5s but mpv's own
+        // --demuxer-lavf-probesize=524288 (512KB) with analyzeduration=5s is
+        // too aggressive for HLS streams with corrupt mid-segment packets
+        // (e.g. "non-existing PPS 0 referenced"); the demuxer stalls exactly
+        // when the cache window is exhausted, producing a freeze that looks
+        // like a 1:01 hang. Give the demuxer more data so it can find a clean
+        // keyframe past the bad packet.
+        MpvRuntimeOption("demuxer-lavf-probesize", "1048576"),
+        MpvRuntimeOption("demuxer-lavf-analyzeduration", "10"),
+        // Drop corrupt packets at the demuxer rather than passing them to
+        // the decoder. Without this, a single bad packet in an HLS segment
+        // hangs the decoder ("non-existing PPS 0 referenced") and the
+        // player never recovers. discardcorrupt is the ffmpeg-level flag
+        // exposed via mpv's demuxer-lavf option list.
+        MpvRuntimeOption("demuxer-lavf-o", "fflags=+discardcorrupt"),
+        // Drop frames the decoder couldn't produce (vs. erroring out).
+        // Required for the same reason: one bad H.264 reference frame
+        // otherwise stalls playback forever.
+        MpvRuntimeOption("framedrop", "decoder+vo"),
+        // Tell libavcodec to ignore decode errors instead of bailing out on
+        // a single bad H.264 reference (e.g. "non-existing PPS 0 referenced"
+        // from a mid-segment HLS corruption). Without this, the decoder can
+        // hit a fatal error state that discardcorrupt + framedrop don't
+        // catch, and the stream stays frozen forever.
+        MpvRuntimeOption("errordetect", "ignore_err"),
+        // For HLS in particular, reduce the read-ahead so a stalled segment
+        // doesn't pin the whole 60s cache window. This complements
+        // cache-secs=60 below by limiting how much pre-buffer the network
+        // thread will wait on.
+        MpvRuntimeOption("demuxer-readahead-secs", "1"),
+        // Keep the most recently decoded frame around when the decoder
+        // gives up on a packet, so the surface still has something to draw
+        // even if a corrupt NAL halts decoding briefly.
+        MpvRuntimeOption("demuxer-lavf-keep-frame", "1"),
         MpvRuntimeOption("demuxer-max-bytes", stremioCacheBytes()),
         MpvRuntimeOption("demuxer-max-packets", "150000000"),
         MpvRuntimeOption("cache", "yes"),
         MpvRuntimeOption("cache-pause", "no"),
         MpvRuntimeOption("cache-secs", "60"),
+        MpvRuntimeOption("force-seekable", "yes"),
         MpvRuntimeOption("vd-lavc-threads", "0"),
         MpvRuntimeOption("ad-lavc-threads", "0"),
         MpvRuntimeOption("audio-fallback-to-null", "yes"),
