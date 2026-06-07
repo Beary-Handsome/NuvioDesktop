@@ -428,19 +428,10 @@ fun App() {
 
             when (authState) {
                 is AuthState.Loading -> {
-                    if (allowOfflineProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
-                    } else {
-                        gateScreen = AppGateScreen.Loading.name
-                    }
+                    enterProfileGate(cachedProfiles, syncOnEnter = false)
                 }
                 is AuthState.Unauthenticated -> {
-                    if (allowOfflineProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
-                    } else {
-                        ProfileRepository.clearInMemory()
-                        gateScreen = AppGateScreen.Auth.name
-                    }
+                    enterProfileGate(cachedProfiles, syncOnEnter = false)
                 }
                 is AuthState.Authenticated -> {
                     val authenticatedState = authState as AuthState.Authenticated

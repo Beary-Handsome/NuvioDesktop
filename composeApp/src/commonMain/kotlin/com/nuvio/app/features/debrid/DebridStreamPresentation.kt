@@ -12,11 +12,11 @@ object DebridStreamPresentation {
         return groups.map { group ->
             val visibleStreams = group.streams
                 .filterNot { stream -> stream.isInactiveResolverStream(settings) }
-                .filterNot { stream -> stream.isUncachedDebridStream }
             val debridStreams = visibleStreams.filter { stream -> stream.isManagedDebridStream }
             if (debridStreams.isEmpty()) return@map group.copy(streams = visibleStreams)
 
-            val presentedDebridStreams = applyPreferences(debridStreams, settings)
+            val presentedDebridStreams = debridStreams
+                .sortedWith(compareByDescending { it.debridCacheStatus?.state == StreamDebridCacheState.CACHED })
                 .map { stream ->
                     if (settings.hasCustomStreamFormatting) {
                         formatter.format(stream, settings)
@@ -57,8 +57,7 @@ object DebridStreamPresentation {
 
     private fun StreamItem.isInactiveResolverStream(settings: DebridSettings): Boolean {
         val streamProviderId = DebridProviders.byId(clientResolve?.service)?.id ?: return false
-        val activeProviderId = settings.activeResolverProviderId ?: return false
-        return isDirectDebridStream && streamProviderId != activeProviderId
+        return isDirectDebridStream && settings.apiKeyFor(streamProviderId).isBlank()
     }
 
     private fun applyLimits(

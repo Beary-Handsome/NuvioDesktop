@@ -63,6 +63,10 @@ internal object TraktScrobbleRepository {
         sendScrobble(action = "stop", item = item, progressPercent = progressPercent)
     }
 
+    suspend fun scrobblePause(item: TraktScrobbleItem, progressPercent: Float) {
+        sendScrobble(action = "pause", item = item, progressPercent = progressPercent)
+    }
+
     suspend fun buildItem(
         contentType: String,
         parentMetaId: String,

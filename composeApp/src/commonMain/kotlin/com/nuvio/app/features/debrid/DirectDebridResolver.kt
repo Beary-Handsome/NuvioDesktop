@@ -119,8 +119,7 @@ object DirectDebridPlaybackResolver {
             return false
         }
         val providerId = DebridProviders.byId(stream.clientResolve?.service)?.id ?: return false
-        return providerId == settings.activeResolverProviderId &&
-            settings.apiKeyFor(providerId).isNotBlank() &&
+        return settings.apiKeyFor(providerId).isNotBlank() &&
             DebridProviderApis.apiFor(providerId) != null
     }
 
@@ -131,9 +130,6 @@ object DirectDebridPlaybackResolver {
         val providerId = DebridProviders.byId(stream.clientResolve?.service)?.id
             ?: return DirectDebridResolveResult.Error
         val settings = DebridSettingsRepository.snapshot()
-        if (providerId != settings.activeResolverProviderId) {
-            return DirectDebridResolveResult.Stale
-        }
         val apiKey = settings
             .apiKeyFor(providerId)
             .trim()
@@ -312,7 +308,6 @@ private fun StreamItem.debridResolveCacheKey(season: Int?, episode: Int?): Strin
     resolve ?: return null
     val providerId = DebridProviders.byId(resolve.service)?.id ?: return null
     val settings = DebridSettingsRepository.snapshot()
-    if (providerId != settings.activeResolverProviderId) return null
     val apiKey = settings
         .apiKeyFor(providerId)
         .trim()

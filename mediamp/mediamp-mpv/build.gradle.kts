@@ -64,6 +64,7 @@ kotlin {
 
 if (hasAndroidSdk) {
     extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+        compileSdk = 35
         namespace = "org.openani.mediamp.mpv"
         defaultConfig {
             ndk {

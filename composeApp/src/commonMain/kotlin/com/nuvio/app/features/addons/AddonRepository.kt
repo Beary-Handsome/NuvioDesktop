@@ -63,10 +63,20 @@ object AddonRepository {
         currentProfileId = effectiveProfileId
         log.d { "initialize() — loading local addons for profile $currentProfileId" }
 
-        val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
+        var storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
         val enabledByUrl = loadLocalEnabledStates()
         log.d { "initialize() — local addon count: ${storedUrls.size}" }
-        if (storedUrls.isEmpty()) return
+        if (storedUrls.isEmpty()) {
+            val defaultAddons = listOf(
+                "https://riven.example.com/manifest.json",
+                "https://comet.example.com/manifest.json",
+                "https://mediafusion.example.com/manifest.json",
+                "https://easynews-addon.example.com/manifest.json",
+            )
+            storedUrls = defaultAddons
+            AddonStorage.saveInstalledAddonUrls(currentProfileId, storedUrls)
+            log.i { "initialize() — seeded ${storedUrls.size} default addons" }
+        }
 
         val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
         _uiState.value = AddonsUiState(
