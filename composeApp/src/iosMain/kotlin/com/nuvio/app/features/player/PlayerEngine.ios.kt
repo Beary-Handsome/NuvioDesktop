@@ -34,6 +34,14 @@ actual fun PlatformPlayerSurface(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+    onSubtitleClick: (() -> Unit)?,
+    onAudioClick: (() -> Unit)?,
+    onVideoSettingsClick: (() -> Unit)?,
+    onSourcesClick: (() -> Unit)?,
+    onEpisodesClick: (() -> Unit)?,
+    onBack: (() -> Unit)?,
+    onResizeModeClick: (() -> Unit)?,
+    onSpeedClick: (() -> Unit)?,
 ) {
     sanitizePlaybackResponseHeaders(sourceResponseHeaders)
     val latestOnControllerReady = rememberUpdatedState(onControllerReady)

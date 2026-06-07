@@ -991,6 +991,8 @@
     <string name="streams_resume_from_time">استئناف من %1$s</string>
     <string name="streams_size">الحجم %1$s</string>
     <string name="trailer_close">إغلاق</string>
+    <string name="trailer_mute">كتم الصوت</string>
+    <string name="trailer_unmute">إلغاء كتم الصوت</string>
     <string name="trailer_unable_to_play">فشل التشغيل</string>
     <string name="trakt_lists_load_failed">فشل تحميل القوائم</string>
     <string name="trakt_lists_update_failed">فشل التحديث</string>

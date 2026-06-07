@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.features.cloud.CloudLibraryContentType
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlayableResult
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
@@ -96,7 +97,7 @@ import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 
 private const val PlaybackProgressPersistIntervalMs = 60_000L
-private const val PlayerControlsAutoHideDelayMs = 3_500L
+private const val PlayerControlsAutoHideDelayMs = 8_000L
 private const val PlayerCursorAutoHideDelayMs = 700L
 private const val PlayerDoubleTapSeekStepMs = 10_000L
 private const val PlayerDoubleTapSeekResetDelayMs = 800L
@@ -218,6 +219,10 @@ fun PlayerScreen(
         val playerFocusRequester = remember { FocusRequester() }
         val hoverDrivenChrome = !usesNativePlayerChrome && !usesAnimatedPlayerChrome
         var controlsVisible by rememberSaveable { mutableStateOf(true) }
+        var useNuvioOverlay by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            useNuvioOverlay = runCatching { PlayerSettingsRepository.getPlayerBackend() == PlayerBackendOption.NUVIO_PLAYER }.getOrDefault(false)
+        }
         var playerControlsLocked by rememberSaveable { mutableStateOf(false) }
         var isHovering by remember { mutableStateOf(false) }
         var cursorVisible by remember { mutableStateOf(true) }
@@ -1471,13 +1476,23 @@ fun PlayerScreen(
 
         fun openSourcesPanel() {
             val type = contentType ?: parentMetaType
-            val vid = activeVideoId ?: return
-            PlayerStreamsRepository.loadSources(
-                type = type,
-                videoId = vid,
-                season = activeSeasonNumber,
-                episode = activeEpisodeNumber,
-            )
+            if (type == CloudLibraryContentType) {
+                PlayerStreamsRepository.setCloudSources(
+                    title = streamTitle,
+                    subtitle = streamSubtitle,
+                    providerName = providerName,
+                    providerAddonId = providerAddonId ?: type,
+                    videoSizeBytes = null,
+                )
+            } else {
+                val vid = activeVideoId ?: return
+                PlayerStreamsRepository.loadSources(
+                    type = type,
+                    videoId = vid,
+                    season = activeSeasonNumber,
+                    episode = activeEpisodeNumber,
+                )
+            }
             showSourcesPanel = true
             showEpisodesPanel = false
             controlsVisible = false
@@ -2155,6 +2170,22 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
                 resizeMode = resizeMode,
+                onSubtitleClick = {
+                    refreshTracks()
+                    showSubtitleModal = true
+                },
+                onAudioClick = {
+                    refreshTracks()
+                    showAudioModal = true
+                },
+                onVideoSettingsClick = if (isIos || isDesktop) {
+                    { showVideoSettingsModal = true }
+                } else { null },
+                onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
+                onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
+                onBack = onBackWithProgress,
+                onResizeModeClick = ::cycleResizeMode,
+                onSpeedClick = ::cyclePlaybackSpeed,
                 onControllerReady = { controller ->
                     playerController = controller
                     playerControllerSourceUrl = activeSourceUrl
@@ -2201,7 +2232,7 @@ fun PlayerScreen(
             )
 
             AnimatedVisibility(
-                visible = pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
+                visible = pausedOverlayVisible && !controlsVisible && !playerControlsLocked && !useNuvioOverlay,
                 enter = fadeIn(animationSpec = tween(durationMillis = 220)),
                 exit = fadeOut(animationSpec = tween(durationMillis = 180)),
             ) {
@@ -2221,7 +2252,7 @@ fun PlayerScreen(
             }
 
             AnimatedVisibility(
-                visible = (controlsVisible || showParentalGuide) && !playerControlsLocked,
+                visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !useNuvioOverlay,
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
@@ -2460,14 +2491,24 @@ fun PlayerScreen(
                 onStreamSelected = ::switchToSource,
                 onReload = {
                     val type = contentType ?: parentMetaType
-                    val vid = activeVideoId ?: return@PlayerSourcesPanel
-                    PlayerStreamsRepository.loadSources(
-                        type = type,
-                        videoId = vid,
-                        season = activeSeasonNumber,
-                        episode = activeEpisodeNumber,
-                        forceRefresh = true,
-                    )
+                    if (type == CloudLibraryContentType) {
+                        PlayerStreamsRepository.setCloudSources(
+                            title = streamTitle,
+                            subtitle = streamSubtitle,
+                            providerName = providerName,
+                            providerAddonId = providerAddonId ?: type,
+                            videoSizeBytes = null,
+                        )
+                    } else {
+                        val vid = activeVideoId ?: return@PlayerSourcesPanel
+                        PlayerStreamsRepository.loadSources(
+                            type = type,
+                            videoId = vid,
+                            season = activeSeasonNumber,
+                            episode = activeEpisodeNumber,
+                            forceRefresh = true,
+                        )
+                    }
                 },
                 onDismiss = {
                     showSourcesPanel = false

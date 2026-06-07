@@ -872,6 +872,8 @@
     <string name="streams_resume_from_time">Συνέχεια από %1$s</string>
     <string name="streams_size">ΜΕΓΕΘΟΣ %1$s</string>
     <string name="trailer_close">Κλείσιμο τρέιλερ</string>
+    <string name="trailer_mute">Σίγαση τρέιλερ</string>
+    <string name="trailer_unmute">Κατάργηση σίγασης τρέιλερ</string>
     <string name="trailer_unable_to_play">Αδυναμία αναπαραγωγής τρέιλερ</string>
     <string name="trakt_lists_load_failed">Αποτυχία φόρτωσης λιστών Trakt</string>
     <string name="trakt_lists_update_failed">Αποτυχία ενημέρωσης λιστών Trakt</string>

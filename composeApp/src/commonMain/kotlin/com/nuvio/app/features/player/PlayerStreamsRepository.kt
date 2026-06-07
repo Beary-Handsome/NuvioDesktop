@@ -18,6 +18,9 @@ import com.nuvio.app.features.plugins.PluginScraper
 import com.nuvio.app.features.streams.AddonStreamWarmupRepository
 import com.nuvio.app.features.streams.AddonStreamGroup
 import com.nuvio.app.features.streams.StreamAutoPlaySelector
+import com.nuvio.app.features.streams.StreamBadgePresentation
+import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
+import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamParser
 import com.nuvio.app.features.streams.StreamsUiState
@@ -107,6 +110,50 @@ object PlayerStreamsRepository {
         episodeStreamsJob?.cancel()
         episodeStreamsRequestKey = null
         _episodeStreamsState.value = StreamsUiState()
+    }
+
+    fun setCloudSources(
+        title: String,
+        subtitle: String?,
+        providerName: String,
+        providerAddonId: String,
+        videoSizeBytes: Long? = null,
+    ) {
+        log.d { "setCloudSources: title='$title' subtitle='$subtitle' provider='$providerName'" }
+        sourceJob?.cancel()
+        sourceRequestKey = null
+        val stream = StreamItem(
+            name = title,
+            title = title,
+            description = subtitle,
+            addonName = providerName,
+            addonId = providerAddonId,
+            behaviorHints = StreamBehaviorHints(
+                filename = title,
+                videoSize = videoSizeBytes,
+            ),
+        )
+        val group = AddonStreamGroup(
+            addonName = providerName,
+            addonId = providerAddonId,
+            streams = listOf(stream),
+            isLoading = false,
+        )
+        val badgeRules = StreamBadgeSettingsRepository.snapshot()
+        log.d { "setCloudSources: badgeRules.hasImport=${badgeRules.hasImport} imports=${badgeRules.imports.size} activeFilters=${badgeRules.enabledFilterCount}" }
+        val finalGroups = if (badgeRules.hasImport) {
+            StreamBadgePresentation.apply(listOf(group), badgeRules)
+        } else {
+            listOf(group)
+        }
+        val badgeCount = finalGroups.firstOrNull()?.streams?.firstOrNull()?.badges?.size ?: 0
+        val finalStream = finalGroups.firstOrNull()?.streams?.firstOrNull()
+        log.d { "setCloudSources: finalGroups.size=${finalGroups.size} badgesOnStream=$badgeCount streamBadges=${finalStream?.badges?.map { "${it.name}:${it.imageURL.take(40)}" }}" }
+        _sourceState.value = StreamsUiState(
+            groups = finalGroups,
+            activeAddonIds = setOf(providerAddonId),
+            isAnyLoading = false,
+        )
     }
 
     fun clearAll() {
@@ -389,12 +436,19 @@ object PlayerStreamsRepository {
                     }
                 }
             }
+            launch {
+                val badgeRules = StreamBadgeSettingsRepository.snapshot()
+                if (badgeRules.hasImport) {
+                    stateFlow.update { current ->
+                        current.copy(groups = StreamBadgePresentation.apply(current.groups, badgeRules))
+                    }
+                }
+            }
             completions.close()
         }
         setJob(job)
     }
 }
-
 private data class PlayerInstalledStreamAddonTarget(
     val addonName: String,
     val addonId: String,

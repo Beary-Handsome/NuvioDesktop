@@ -8,7 +8,6 @@ import com.nuvio.app.features.player.desktop.mpv.MpvRuntimeBootstrap
 import com.nuvio.app.features.player.desktop.mpv.MpvRuntimeLocator
 import com.nuvio.app.features.player.desktop.nativebridge.NativeBridgeDesktopPlayerBackend
 import com.nuvio.app.features.player.desktop.nativebridge.NativeBridgeRuntimeLocator
-import com.nuvio.app.features.player.desktop.vlc.VlcDesktopPlayerBackend
 
 internal object DesktopPlayerBackendFactory {
     private const val BACKEND_PROPERTY = "nuvio.player.backend"
@@ -28,7 +27,7 @@ internal object DesktopPlayerBackendFactory {
         // Convert user preference to selection
         val userSelection = when (userPreference) {
             PlayerBackendOption.MPV -> DesktopPlayerBackendSelection(DesktopPlayerBackendKind.Mpv, "mpv", "user-preference")
-            PlayerBackendOption.VLC -> DesktopPlayerBackendSelection(DesktopPlayerBackendKind.Vlc, "vlc", "user-preference")
+            PlayerBackendOption.NUVIO_PLAYER -> DesktopPlayerBackendSelection(DesktopPlayerBackendKind.Mpv, "nuvio-player", "user-preference")
             PlayerBackendOption.AUTO -> {
                 // Fall back to system properties/env vars if AUTO is selected
                 DesktopPlayerBackendSelection.resolve()
@@ -43,7 +42,6 @@ internal object DesktopPlayerBackendFactory {
                 selection = userSelection,
             )
             DesktopPlayerBackendKind.Mpv -> createMpvOrUnavailable(userSelection)
-            DesktopPlayerBackendKind.Vlc -> createVlcOrUnavailable(userSelection)
             DesktopPlayerBackendKind.Auto -> createAutoWithFallback(userSelection)
             DesktopPlayerBackendKind.Native -> createNativeWithMpvFallback(userSelection)
         }
@@ -56,24 +54,10 @@ internal object DesktopPlayerBackendFactory {
             selection = selection,
         )
         
-    private fun createVlcOrUnavailable(selection: DesktopPlayerBackendSelection): DesktopPlayerBackend =
-        createVlcOrNull() ?: unavailable(
-            backendName = "mediamp-vlc",
-            technicalMessage = "VLC backend is unavailable.",
-            selection = selection,
-        )
-
-    private fun createVlcOrNull(): DesktopPlayerBackend? =
-        VlcDesktopPlayerBackend.create()
-            .onSuccess {
-                DesktopRuntimeLog.info("Selected player backend=${it.backendName}")
-            }
-            .getOrNull()
-
     private fun createAutoWithFallback(selection: DesktopPlayerBackendSelection): DesktopPlayerBackend =
-        createVlcOrNull() ?: createMpvOrNull(selection) ?: unavailable(
+        createMpvOrNull(selection) ?: unavailable(
             backendName = "auto",
-            technicalMessage = "VLC and MPV backends are unavailable.",
+            technicalMessage = "MPV backend is unavailable.",
             selection = selection,
         )
 
@@ -129,7 +113,6 @@ internal object DesktopPlayerBackendFactory {
     private enum class DesktopPlayerBackendKind {
         Auto,
         Mpv,
-        Vlc,
         Native,
         None,
     }
@@ -156,7 +139,6 @@ internal object DesktopPlayerBackendFactory {
                 DesktopPlayerBackendSelection(
                     backend = when (value) {
                         "mpv" -> DesktopPlayerBackendKind.Mpv
-                        "vlc" -> DesktopPlayerBackendKind.Vlc
                         "native" -> DesktopPlayerBackendKind.Native
                         "none" -> DesktopPlayerBackendKind.None
                         else -> DesktopPlayerBackendKind.Auto

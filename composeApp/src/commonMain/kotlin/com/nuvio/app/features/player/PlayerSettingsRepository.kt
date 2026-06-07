@@ -82,6 +82,7 @@ data class PlayerSettingsUiState(
     val iosSaturation: Int = 0,
     val iosGamma: Int = 0,
     val playerBackend: PlayerBackendOption = PlayerBackendOption.AUTO,
+    val mpvConfigPath: String = "",
 )
 
 object PlayerSettingsRepository {
@@ -140,6 +141,7 @@ object PlayerSettingsRepository {
     private var iosSaturation = 0
     private var iosGamma = 0
     private var playerBackend = PlayerBackendOption.AUTO
+    private var mpvConfigPath = ""
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -203,6 +205,7 @@ object PlayerSettingsRepository {
         iosSaturation = 0
         iosGamma = 0
         playerBackend = PlayerBackendOption.AUTO
+        mpvConfigPath = ""
         publish()
     }
 
@@ -315,6 +318,7 @@ object PlayerSettingsRepository {
         playerBackend = PlayerSettingsStorage.loadPlayerBackend()
             ?.let { runCatching { PlayerBackendOption.valueOf(it) }.getOrNull() }
             ?: PlayerBackendOption.AUTO
+        mpvConfigPath = PlayerSettingsStorage.loadMpvConfigPath() ?: ""
         publish()
     }
 
@@ -762,6 +766,19 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.savePlayerBackend(option.name)
     }
 
+    fun getMpvConfigPath(): String {
+        ensureLoaded()
+        return mpvConfigPath
+    }
+
+    fun setMpvConfigPath(path: String) {
+        ensureLoaded()
+        if (mpvConfigPath == path) return
+        mpvConfigPath = path
+        publish()
+        PlayerSettingsStorage.saveMpvConfigPath(path)
+    }
+
     fun resetIosVideoOutputTuning() {
         ensureLoaded()
         iosBrightness = 0
@@ -841,6 +858,7 @@ object PlayerSettingsRepository {
             iosSaturation = iosSaturation,
             iosGamma = iosGamma,
             playerBackend = playerBackend,
+            mpvConfigPath = mpvConfigPath,
         )
     }
 

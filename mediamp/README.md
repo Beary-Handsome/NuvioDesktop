@@ -57,12 +57,8 @@ The `-all` bundle includes:
 - Mediamp common APIs and Compose UI APIs
 - ExoPlayer backend for Android
     - With `media3-exoplayer-hls` for streaming `.m3u8`
-- VLC backend for JVM
 - AVKit backend for iOS
 
-> [!NOTE]
-> The VLC backend requires VLC to be installed on the user's OS.
-> See [mediamp-vlc/README.md](mediamp-vlc/README.md) for shipping VLC binaries with your app.
 
 > [!WARNING]
 > **Compatibility Warning**
@@ -264,11 +260,9 @@ transitive dependencies, the backend-specific implementations may have different
 A breakdown of the licenses:
 
 - mediamp-exoplayer: Apache License 2.0 (Apache-v2)
-- mediamp-vlc: GNU GENERAL PUBLIC LICENSE Version 3 (GPLv3)
 - mediamp-mpv: Apache License 2.0
 - All other modules: Apache License 2.0
 
 You can find the full license text of Apache-v2 in the `LICENSE` file from the root of the
-repository, and that of GPLv3 from `mediamp-vlc/LICENSE`.
+repository.
 
-[vlcj]: https://github.com/caprica/vlcj

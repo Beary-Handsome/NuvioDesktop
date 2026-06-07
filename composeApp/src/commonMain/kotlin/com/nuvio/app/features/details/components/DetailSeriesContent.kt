@@ -72,7 +72,7 @@ import com.nuvio.app.features.details.MetaEpisodeCardStyle
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.SeasonViewMode
 import com.nuvio.app.features.details.SeasonViewModeStorage
-import com.nuvio.app.features.details.formatRuntimeFromMinutes
+import com.nuvio.app.features.details.formatRuntimeFromMinutesComposable
 import com.nuvio.app.features.details.metaVideoSeasonEpisodeComparator
 import com.nuvio.app.features.details.normalizeSeasonNumber
 import com.nuvio.app.features.details.seasonSortKey
@@ -672,7 +672,7 @@ private fun EpisodeHorizontalCard(
     val cardShape = RoundedCornerShape(metrics.cornerRadius)
     val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
     val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-    val runtimeLabel = remember(video.runtime) { video.runtime?.takeIf { it > 0 }?.let(::formatEpisodeRuntime) }
+    val runtimeLabel = video.runtime?.takeIf { it > 0 }?.let { formatRuntimeFromMinutesComposable(it) }
     Box(
         modifier = Modifier
             .width(metrics.cardWidth)
@@ -947,10 +947,6 @@ private fun rememberEpisodeHorizontalCardMetrics(maxWidthDp: Float): EpisodeHori
             )
         }
     }
-}
-
-private fun formatEpisodeRuntime(runtimeMinutes: Int): String {
-    return formatRuntimeFromMinutes(runtimeMinutes)
 }
 
 @Composable

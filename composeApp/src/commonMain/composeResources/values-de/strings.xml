@@ -1025,6 +1025,8 @@
     <string name="streams_resume_from_time">Fortsetzen ab %1$s</string>
     <string name="streams_size">GRÖSSE %1$s</string>
     <string name="trailer_close">Trailer schließen</string>
+    <string name="trailer_mute">Trailer stummschalten</string>
+    <string name="trailer_unmute">Stummschaltung aufheben</string>
     <string name="trailer_unable_to_play">Trailer kann nicht abgespielt werden</string>
     <string name="trakt_lists_load_failed">Trakt-Listen konnten nicht geladen werden</string>
     <string name="trakt_lists_update_failed">Trakt-Listen konnten nicht aktualisiert werden</string>

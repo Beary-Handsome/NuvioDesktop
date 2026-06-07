@@ -412,6 +412,51 @@ internal object PluginRuntime {
         }
     }
 
+    private fun quoteJsonKeys(json: String): String {
+        val sb = StringBuilder(json.length + 32)
+        var i = 0
+        var inString = false
+        while (i < json.length) {
+            val c = json[i]
+            if (c == '"') {
+                var b = i - 1
+                var bs = 0
+                while (b >= 0 && json[b] == '\\') { bs++; b-- }
+                if (bs % 2 == 0) inString = !inString
+            }
+            if (!inString && (c == '{' || c == ',')) {
+                sb.append(c)
+                i = json.indexOfFirstCharAfterWhitespace(i + 1)
+                if (i < json.length && json[i] == '{') continue
+                if (i < json.length && json[i] != '"' && json[i] != '}' && json[i] != ']') {
+                    val keyStart = i
+                    while (i < json.length && json[i] != ':' && json[i] != ' ' && json[i] != '\t' && json[i] != '\n' && json[i] != '\r' && json[i] != '{' && json[i] != '}' && json[i] != ']' && json[i] != ',') {
+                        i++
+                    }
+                    if (i < json.length && json[i] == ':') {
+                        sb.append('"')
+                        sb.append(json, keyStart, i)
+                        sb.append('"')
+                        continue
+                    }
+                    i = keyStart
+                }
+                continue
+            }
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
+    }
+
+    private fun String.indexOfFirstCharAfterWhitespace(start: Int): Int {
+        var pos = start
+        while (pos < this.length && (this[pos] == ' ' || this[pos] == '\t' || this[pos] == '\n' || this[pos] == '\r')) {
+            pos++
+        }
+        return pos
+    }
+
     private fun truncateString(value: String, maxChars: Int): String {
         if (value.length <= maxChars) return value
         val end = maxChars - FETCH_TRUNCATION_SUFFIX.length
@@ -419,9 +464,21 @@ internal object PluginRuntime {
         return value.substring(0, end) + FETCH_TRUNCATION_SUFFIX
     }
 
+    private val lenientJson = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        allowSpecialFloatingPointValues = true
+        coerceInputValues = true
+    }
+
     private fun parseJsonResults(rawJson: String): List<PluginRuntimeResult> {
         return runCatching {
-            val array = json.parseToJsonElement(rawJson) as? JsonArray ?: return emptyList()
+            val cleaned = rawJson.trim().filter { c ->
+                c.code >= 0x20 || c == '\t' || c == '\n' || c == '\r'
+            }
+            val root = runCatching { lenientJson.parseToJsonElement(cleaned) }
+                .getOrElse { lenientJson.parseToJsonElement(quoteJsonKeys(cleaned)) }
+            val array = root as? JsonArray ?: return emptyList()
             array.mapNotNull { element ->
                 val item = element as? JsonObject ?: return@mapNotNull null
                 val url = when (val urlValue = item["url"]) {

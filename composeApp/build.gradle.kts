@@ -190,10 +190,10 @@ abstract class PackageWindowsNativeRuntimeTask : DefaultTask() {
         val requiredDlls = listOf(
             "mediampv.dll",
             "libmpv-2.dll",
-            "avcodec-61.dll",
-            "avformat-61.dll",
-            "avutil-59.dll",
-            "swscale-8.dll",
+            "avcodec-62.dll",
+            "avformat-62.dll",
+            "avutil-60.dll",
+            "swscale-9.dll",
             "vulkan-1.dll",
             "MSVCP140.dll",
             "VCRUNTIME140.dll",
@@ -606,12 +606,11 @@ kotlin {
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
                 implementation(libs.jna)
-                implementation(libs.jamepad)
                 implementation("net.java.dev.jna:jna-platform:5.14.0")
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation("org.openani.mediamp:mediamp-api:0.1.0-dev-1")
                 implementation("org.openani.mediamp:mediamp-mpv:0.1.0-dev-1") { attributes { attribute(Attribute.of("org.jetbrains.kotlin.platform.type", String::class.java), "jvm") } }
-                implementation("org.openani.mediamp:mediamp-vlc:0.1.0-dev-1") { attributes { attribute(Attribute.of("org.jetbrains.kotlin.platform.type", String::class.java), "jvm") } }
+
             }
         }
         androidMain.dependencies {
@@ -718,6 +717,10 @@ compose.desktop {
             packageVersion = windowsSafeVersion
             vendor = "Creepso"
             modules("java.net.http")
+
+            // Include nuvio-player binary in distribution
+            // Binary at: resources/linux/nuvio-player or resources/windows/nuvio-player.exe
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("src/desktopMain/resources"))
 
             val hostOs = System.getProperty("os.name").lowercase()
             when {

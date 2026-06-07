@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import co.touchlab.kermit.Logger
 
 const val STREAM_BADGE_IMPORT_LIMIT = 3
 
@@ -185,8 +186,13 @@ internal object StreamBadgeRulesParser {
 
 object StreamBadgeMatcher {
     fun compile(rules: StreamBadgeRules): List<CompiledStreamBadgeFilter> {
-        if (!rules.hasImport) return emptyList()
-        return rules.normalized().imports.filter { it.isActive }.flatMap { import ->
+        if (!rules.hasImport) {
+            Logger.d { "StreamBadgeMatcher.compile: no imports, hasImport=${rules.hasImport}, importCount=${rules.imports.size}" }
+            return emptyList()
+        }
+        val normalized = rules.normalized()
+        Logger.d { "StreamBadgeMatcher.compile: active imports=${normalized.imports.filter { it.isActive }.size}, total imports=${normalized.imports.size}" }
+        return normalized.imports.filter { it.isActive }.flatMap { import ->
             import.filters.mapNotNull { filter ->
                 if (!filter.isEnabled || filter.name.isBlank() || filter.pattern.isBlank()) {
                     return@mapNotNull null

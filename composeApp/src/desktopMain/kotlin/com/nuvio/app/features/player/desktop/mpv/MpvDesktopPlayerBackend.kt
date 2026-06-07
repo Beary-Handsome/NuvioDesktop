@@ -9,6 +9,7 @@ import com.nuvio.app.features.player.AudioTrack
 import com.nuvio.app.features.player.PlayerAudioLevel
 import com.nuvio.app.features.player.PlayerEngineController
 import com.nuvio.app.features.player.PlayerResizeMode
+import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
@@ -57,6 +58,13 @@ private const val ExternalSubtitleCodepage = "+utf-8"
 private const val EmbeddedSubtitleCodepage = "auto"
 private const val ExternalSubtitleAssOverride = "strip"
 private const val EmbeddedSubtitleAssOverride = "no"
+private const val WatchdogFrozenMs = 3_000L
+private const val WatchdogCooldownMs = 15_000L
+private const val WatchdogSkipSec = 5.0
+private const val WatchdogMinPositionMs = 10_000L
+private const val WatchdogTickMs = 500L
+private const val WatchdogBufferingStuckMs = 30_000L
+private const val WatchdogMarkerV8 = "NUVIO_BUILD_MARKER_LINUX_2026_06_06_PAUSE_RESUME_FIX_V8"
 
 @OptIn(InternalMediampApi::class)
 internal class MpvDesktopPlayerBackend private constructor(
@@ -81,6 +89,12 @@ internal class MpvDesktopPlayerBackend private constructor(
     @Volatile private var currentRequest: DesktopPlayerRequest? = null
     @Volatile private var lastKnownPositionMs: Long = 0L
     @Volatile private var pendingSeekMs: Long = 0L
+    @Volatile private var lastPauseAtMs: Long = 0L
+    @Volatile private var watchdogLastPositionMs: Long = -1L
+    @Volatile private var watchdogLastChangeAtMs: Long = 0L
+    @Volatile private var watchdogRecoveryCount: Int = 0
+    @Volatile private var watchdogLastRecoveryAtMs: Long = 0L
+    @Volatile private var watchdogBufferingStartAtMs: Long = 0L
     @Volatile private var externalSubtitleActive = false
     @Volatile private var displayWakeLockHeld = false
     @Volatile private var latestSubtitleStyle = SubtitleStyleState.DEFAULT
@@ -101,12 +115,13 @@ internal class MpvDesktopPlayerBackend private constructor(
         observePlaybackSettings()
         applyDecoderSettings()
         applyCursorSettings()
+        startFreezeWatchdog()
         val initialTuning = loadDesktopMpvVideoTuning()
         val effectiveHwdec = if (isOsLinux() &&
             System.getProperty("nuvio.mpv.diagnostic.hwdec") == null &&
             System.getenv("NUVIO_MPV_DIAGNOSTIC_HWDEC") == null
         ) "no(linux-forced)" else initialTuning.settings.hardwareDecoderMode.mpvValue
-        val marker = "NUVIO_BUILD_MARKER_LINUX_2026_06_03_HLSFIX_V3"
+        val marker = WatchdogMarkerV8
         DesktopRuntimeLog.info("$marker $marker $marker")
         DesktopRuntimeLog.info(
             "MPV backend init os=${System.getProperty("os.name")} " +
@@ -114,7 +129,7 @@ internal class MpvDesktopPlayerBackend private constructor(
                 "effectiveHwdec=$effectiveHwdec",
         )
         DesktopRuntimeLog.info("MPV backend created id=$id runtime=${runtime.directory?.safePath() ?: "none"}")
-        System.err.println("[$marker] effectiveHwdec=$effectiveHwdec")
+        System.err.println("[$marker] effectiveHwdec=$effectiveHwdec freezeWatchdog=enabled tickMs=$WatchdogTickMs frozenMsThreshold=$WatchdogFrozenMs skipSec=$WatchdogSkipSec cooldownMs=$WatchdogCooldownMs minPositionMs=$WatchdogMinPositionMs")
         System.err.flush()
     }
 
@@ -255,6 +270,66 @@ internal class MpvDesktopPlayerBackend private constructor(
         }.launchIn(scope)
     }
 
+    private fun startFreezeWatchdog() {
+        scope.launch {
+            while (!nativeClosed) {
+                delay(WatchdogTickMs)
+                if (stopped || nativeClosed) continue
+                val phase = player.playbackState.value.toDesktopPhase()
+                val now = System.currentTimeMillis()
+                if (phase != DesktopPlayerPhase.Playing) {
+                    watchdogLastPositionMs = -1L
+                    watchdogLastChangeAtMs = 0L
+                    watchdogBufferingStartAtMs = 0L
+                    continue
+                }
+                val currentPos = player.currentPositionMillis.value
+                if (currentPos != watchdogLastPositionMs) {
+                    watchdogLastPositionMs = currentPos
+                    watchdogLastChangeAtMs = now
+                    watchdogBufferingStartAtMs = 0L
+                    continue
+                }
+                val frozenFor = now - watchdogLastChangeAtMs
+                if (frozenFor < WatchdogFrozenMs) continue
+                if (currentPos < WatchdogMinPositionMs) continue
+                val isBuffering = runCatching {
+                    mpvHandle.getMpvBooleanProperty("paused-for-cache")
+                }.getOrDefault(false)
+                if (isBuffering) {
+                    if (watchdogBufferingStartAtMs == 0L) {
+                        watchdogBufferingStartAtMs = now
+                    }
+                    val bufferingFor = now - watchdogBufferingStartAtMs
+                    if (bufferingFor < WatchdogBufferingStuckMs) {
+                        DesktopRuntimeLog.info("MPV watchdog: paused-for-cache pos=${currentPos}ms frozenFor=${frozenFor}ms bufferingFor=${bufferingFor}ms (waiting)")
+                        watchdogLastChangeAtMs = now
+                        continue
+                    }
+                    DesktopRuntimeLog.info("MPV watchdog: paused-for-cache STUCK for ${bufferingFor}ms -> forcing recovery")
+                }
+                if (now - watchdogLastRecoveryAtMs < WatchdogCooldownMs) continue
+                watchdogLastRecoveryAtMs = now
+                watchdogRecoveryCount += 1
+                val skipMs = (WatchdogSkipSec * 1000.0).toLong()
+                val targetPos = currentPos + skipMs
+                System.err.println("[$WatchdogMarkerV8] AUTO-RECOVERY: time-pos frozen for ${frozenFor}ms at pos=${currentPos}ms (recovery #${watchdogRecoveryCount}). Seeking +${WatchdogSkipSec}s to ${targetPos}ms.")
+                System.err.flush()
+                val seekOk = runCatching {
+                    mpvHandle.command("seek", WatchdogSkipSec.toString(), "relative")
+                }.onFailure {
+                    DesktopRuntimeLog.error("MPV auto-recovery seek+${WatchdogSkipSec}s failed", it)
+                }.getOrNull() == true
+                if (seekOk) {
+                    DesktopRuntimeLog.info("MPV auto-recovery seek+${WatchdogSkipSec}s fired count=$watchdogRecoveryCount at pos=${currentPos}ms targetPos=${targetPos}ms")
+                    watchdogLastPositionMs = targetPos
+                    watchdogLastChangeAtMs = now
+                    watchdogBufferingStartAtMs = 0L
+                }
+            }
+        }
+    }
+
     private fun observeFramePacing() {
         scope.launch {
             while (!nativeClosed) {
@@ -384,13 +459,17 @@ internal class MpvDesktopPlayerBackend private constructor(
             sourceUrl.contains("m3u8", ignoreCase = true)
         if (!isHls) return
         val overrides = listOf(
-            "cache" to "no",
-            "cache-pause" to "no",
-            "demuxer-cache-secs" to "0",
+            "cache" to "yes",
+            "cache-pause" to "yes",
+            "demuxer-cache-secs" to "10",
             "force-seekable" to "no",
             "errordetect" to "ignore_err",
             "framedrop" to "decoder+vo",
-            "demuxer-lavf-o" to "fflags=+discardcorrupt",
+            "vd-lavc-fast" to "yes",
+            "vd-lavc-err-detect" to "ignore_err",
+            "vd-lavc-skiploopfilter" to "nonkey",
+            "vd-extra-frames" to "8",
+            "demuxer-lavf-o" to "fflags=+flush_packets+genpts+discardcorrupt",
         )
         val applied = mutableListOf<String>()
         overrides.forEach { (name, value) ->
@@ -400,7 +479,7 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (ok) applied.add("$name=$value")
         }
         DesktopRuntimeLog.info("MPV HLS overrides applied=${applied.joinToString(",")}")
-        System.err.println("[NUVIO_BUILD_MARKER_LINUX_2026_06_03_HLSFIX_V3] HLS overrides applied=${applied.joinToString(",")}")
+        System.err.println("[$WatchdogMarkerV8] HLS overrides applied=${applied.joinToString(",")}")
         System.err.flush()
     }
 
@@ -433,6 +512,11 @@ internal class MpvDesktopPlayerBackend private constructor(
     private fun snapshotForLog(): String =
         "state=${player.getCurrentPlaybackState()} posMs=${player.currentPositionMillis.value} durationMs=${durationMs() ?: -1}"
 
+    private fun resetFreezeWatchdog() {
+        watchdogLastPositionMs = -1L
+        watchdogLastChangeAtMs = System.currentTimeMillis()
+    }
+
     private fun resetExternalSubtitleState(reason: String) {
         if (nativeClosed) return
         externalSubtitleRequestCounter.incrementAndGet()
@@ -449,6 +533,35 @@ internal class MpvDesktopPlayerBackend private constructor(
         override fun release() = releaseSoft()
 
         override fun play() {
+            if (stopped) {
+                val req = currentRequest
+                if (req != null) {
+                    DesktopRuntimeLog.info("MPV controller play after stop: reloading media source=${req.sourceUrl.redactedMediaUrl()}")
+                    stopped = false
+                    val before = snapshotForLog()
+                    scope.launch {
+                        val result = runCatching {
+                            stateFlow.value = stateFlow.value.copy(phase = DesktopPlayerPhase.Preparing, error = null)
+                            applyHlsSpecificOptionsIfNeeded(req.sourceUrl)
+                            val headers = req.sourceHeaders.toMutableMap()
+                            player.setMediaData(UriMediaData(req.sourceUrl, headers))
+                            if (lastKnownPositionMs > 0L) {
+                                pendingSeekMs = lastKnownPositionMs
+                            }
+                            player.resume()
+                            mpvHandle.setPropertyBoolean("pause", false)
+                        }
+                        DesktopRuntimeLog.info("MPV controller play after stop before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
+                        result.onFailure {
+                            DesktopRuntimeLog.error("MPV controller play after stop failed", it)
+                            fail(DesktopPlayerError.MediaLoadFailed(backendName, "MPV reload after stop failed", it))
+                        }
+                    }
+                    resetFreezeWatchdog()
+                    lastPauseAtMs = 0L
+                }
+                return
+            }
             if (!canReceiveCommands()) return
             val before = snapshotForLog()
             val result = runCatching {
@@ -457,10 +570,23 @@ internal class MpvDesktopPlayerBackend private constructor(
             }
             DesktopRuntimeLog.info("MPV controller play before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
             result.onFailure { DesktopRuntimeLog.error("MPV controller play failed", it) }
+            if (lastKnownPositionMs > 0L) {
+                val req = currentRequest
+                if (req != null && (req.sourceUrl.startsWith("http") || req.sourceUrl.startsWith("https"))) {
+                    DesktopRuntimeLog.info("MPV play after pause: forcing stream reconnect via seek to ${lastKnownPositionMs}ms")
+                    runCatching {
+                        mpvHandle.command("seek", (lastKnownPositionMs / 1000.0).toString(), "absolute+exact")
+                        player.currentPositionMillis.value = lastKnownPositionMs
+                    }
+                    resetFreezeWatchdog()
+                }
+            }
+            lastPauseAtMs = 0L
         }
 
         override fun pause() {
             if (!canReceiveCommands()) return
+            lastPauseAtMs = System.currentTimeMillis()
             val before = snapshotForLog()
             val result = runCatching { player.pause() }
             DesktopRuntimeLog.info("MPV controller pause before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
@@ -838,9 +964,10 @@ internal class MpvDesktopPlayerBackend private constructor(
     companion object {
         fun create(runtime: MpvRuntimeResolution): Result<MpvDesktopPlayerBackend> =
             runCatching {
+                val configPath = PlayerSettingsRepository.getMpvConfigPath().takeIf { it.isNotBlank() }
                 MpvDesktopPlayerBackend(
                     runtime = runtime,
-                    player = MpvMediampPlayer(Unit, EmptyCoroutineContext),
+                    player = MpvMediampPlayer(Unit, EmptyCoroutineContext, configPath),
                 )
             }
     }

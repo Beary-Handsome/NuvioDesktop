@@ -38,9 +38,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaExternalRating
-import com.nuvio.app.features.details.formatRuntimeForDisplay
+import com.nuvio.app.features.details.formatRuntimeForDisplayComposable
 import com.nuvio.app.features.details.formatMetaReleaseLineForDetails
 import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_AUDIENCE
 import com.nuvio.app.features.mdblist.MdbListMetadataService.PROVIDER_IMDB
@@ -77,15 +78,17 @@ fun DetailMetaInfo(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val releaseLine = formatMetaReleaseLineForDetails(meta)
-        val runtimeText = formatRuntimeForDisplay(meta.runtime)
+        val runtimeText = formatRuntimeForDisplayComposable(meta.runtime)
         val ageBadge = meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
         val hasMdbImdbRating = meta.externalRatings.any { it.source == PROVIDER_IMDB }
+        val imdbBadgesEnabled = AppFeaturePolicy.showImdbBadges
         val validImdbRating = meta.imdbRating
             ?.takeIf { raw -> raw.toDoubleOrNull()?.let { it > 0.0 } == true }
+        val showStandaloneImdb = validImdbRating != null && !hasMdbImdbRating && imdbBadgesEnabled
         val hasMetaRow = releaseLine != null ||
             runtimeText != null ||
             ageBadge != null ||
-            (validImdbRating != null && !hasMdbImdbRating)
+            showStandaloneImdb
         if (hasMetaRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -110,7 +113,7 @@ fun DetailMetaInfo(
                 ageBadge?.let { badge ->
                     DetailHeroMetaBadge(text = badge)
                 }
-                if (validImdbRating != null && !hasMdbImdbRating) {
+                if (showStandaloneImdb) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -208,9 +211,10 @@ private fun DetailRatingsRow(
 ) {
     val orderedRatings = remember(ratings) {
         val bySource = ratings.associateBy { it.source }
-        ratingVisuals.mapNotNull { visuals ->
-            bySource[visuals.source]?.let { rating -> visuals to rating }
-        }
+        ratingVisuals.filterNot { !AppFeaturePolicy.showImdbBadges && it.source == PROVIDER_IMDB }
+            .mapNotNull { visuals ->
+                bySource[visuals.source]?.let { rating -> visuals to rating }
+            }
     }
 
     if (orderedRatings.isEmpty()) return
@@ -248,9 +252,12 @@ private fun MetaLabelValueRow(
     label: String,
     value: String,
 ) {
-    Row {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Text(
-            text = "$label:  ",
+            text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,

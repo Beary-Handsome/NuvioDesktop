@@ -1070,6 +1070,8 @@
     <string name="streams_size">VELIKOST %1$s</string>
     <string name="streams_torrent_not_supported">Tento typ streamu není podporován</string>
     <string name="trailer_close">Zavřít trailer</string>
+    <string name="trailer_mute">Ztlumit upoutávku</string>
+    <string name="trailer_unmute">Zrušit ztlumení upoutávky</string>
     <string name="trailer_unable_to_play">Trailer nelze přehrát</string>
     <string name="trakt_lists_load_failed">Nepodařilo se načíst seznamy Trakt</string>
     <string name="trakt_lists_update_failed">Nepodařilo se aktualizovat seznamy Trakt</string>

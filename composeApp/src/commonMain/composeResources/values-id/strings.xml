@@ -1102,6 +1102,8 @@
     <string name="streams_size">UKURAN %1$s</string>
     <string name="streams_torrent_not_supported">Jenis stream ini tidak didukung</string>
     <string name="trailer_close">Tutup trailer</string>
+    <string name="trailer_mute">Bisukan trailer</string>
+    <string name="trailer_unmute">Aktifkan suara trailer</string>
     <string name="trailer_unable_to_play">Tidak dapat memutar trailer</string>
     <string name="trakt_lists_load_failed">Gagal memuat daftar Trakt</string>
     <string name="trakt_lists_update_failed">Gagal memperbarui daftar Trakt</string>

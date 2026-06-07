@@ -29,6 +29,7 @@ import kotlin.coroutines.CoroutineContext
 actual class MpvMediampPlayer(
     context: Any,
     parentCoroutineContext: CoroutineContext,
+    configDir: String? = null,
 ) : AbstractMediampPlayer<MpvMediampPlayer.MPVPlayerData>(parentCoroutineContext) {
     class MPVPlayerData(mediaData: MediaData) : Data(mediaData)
 
@@ -136,8 +137,9 @@ actual class MpvMediampPlayer(
     init {
         handle.setEventListener(eventListener)
 
-        handle.option("config", "no")
-        // handle.option("config-dir", File(filesDir, "mpv_config").absolutePath)
+        if (configDir != null) {
+            handle.option("config-dir", configDir)
+        }
         // handle.option("gpu-shader-cache-dir", File(cacheDir, "mpv_gpu_cache").absolutePath)
         // handle.option("icc-cache-dir", File(cacheDir, "mpv_icc_cache").absolutePath)
         handle.option("profile", "fast")
@@ -318,7 +320,7 @@ actual class MpvMediampPlayer(
         handle.command("stop")
         handle.destroy()
         handle.close()
-
+        playbackState.value = PlaybackState.DESTROYED
     }
 
     companion object {

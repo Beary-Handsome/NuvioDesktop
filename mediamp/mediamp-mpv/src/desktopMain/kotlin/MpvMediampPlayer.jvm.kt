@@ -29,6 +29,7 @@ import kotlin.coroutines.CoroutineContext
 actual class MpvMediampPlayer(
     context: Any,
     parentCoroutineContext: CoroutineContext,
+    configDir: String? = null,
 ) : AbstractMediampPlayer<MpvMediampPlayer.MPVPlayerData>(parentCoroutineContext) {
     class MPVPlayerData(mediaData: MediaData) : Data(mediaData)
 
@@ -42,7 +43,10 @@ actual class MpvMediampPlayer(
 
     private val eventListener = object : EventListener {
         override fun onPropertyChange(name: String) {
-
+            // The mpv log already prints [event_loop] property change: <name>
+            // via the JNI event loop wrapper, so we don't need to re-log here.
+            // Property observers (string/bool/long/double) below carry their
+            // values, which is the interesting info.
         }
 
         override fun onPropertyChange(name: String, value: Boolean) {
@@ -136,8 +140,9 @@ actual class MpvMediampPlayer(
     init {
         handle.setEventListener(eventListener)
 
-        handle.option("config", "no")
-        // handle.option("config-dir", File(filesDir, "mpv_config").absolutePath)
+        if (configDir != null) {
+            handle.option("config-dir", configDir)
+        }
         // handle.option("gpu-shader-cache-dir", File(cacheDir, "mpv_gpu_cache").absolutePath)
         // handle.option("icc-cache-dir", File(cacheDir, "mpv_icc_cache").absolutePath)
         handle.option("profile", "fast")
@@ -173,34 +178,43 @@ actual class MpvMediampPlayer(
             }
 
             is Platform.Linux -> {
-                val isWayland = System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
-                val hasX11Display = System.getenv("DISPLAY")?.isNotEmpty() == true
-                val useWaylandEGL = isWayland && !hasX11Display
+                val sessionType = System.getenv("XDG_SESSION_TYPE")?.lowercase() ?: ""
+                val isWayland = sessionType == "wayland" || System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
                 val gpuContext = when {
-                    useWaylandEGL -> "wayland"
-                    hasX11Display -> "x11egl"
+                    isWayland -> "wayland"
+                    System.getenv("DISPLAY")?.isNotEmpty() == true -> "x11egl"
                     else -> "auto"
                 }
-                
-                handle.option("ao", if (useWaylandEGL) "pipewire,pulseaudio,alsa" else "pulseaudio,alsa")
+
+                handle.option("ao", "pipewire,pulseaudio,alsa")
                 handle.option("vo", "libmpv")
                 handle.option("fbo-format", "rgba8")
                 handle.option("gpu-context", gpuContext)
-                handle.option("vulkan-device-index", "0") // Use first GPU (important for multi-GPU setups)
-                
-                // NVIDIA optimization: Enable VDPAU and VA-API
+                handle.option("vulkan-device-index", "0")
+
                 handle.option("hwdec-extra-hw-frames", "16")
-                
-                // Some VA-API drivers corrupt HEVC frames; restrict to known-safe codecs
-                // NVIDIA supports all these codecs efficiently
+
                 hardwareDecoderCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1"
+                // Linux: GPU decode stacks (CUDA/VAAPI/Vulkan) are unreliable
+                // on most desktop envs and produce "non-existing PPS 0 referenced"
+                // stalls on HLS streams with corrupt mid-segment packets.
+                // Force software decode at init time (overrides the generic
+                // "auto" set below). Users with a known-good GPU stack can opt
+                // in via NUVIO_MPV_DIAGNOSTIC_HWDEC.
+                val forceLinuxSoftwareDecode =
+                    System.getProperty("nuvio.mpv.diagnostic.hwdec") == null &&
+                        System.getenv("NUVIO_MPV_DIAGNOSTIC_HWDEC") == null
+                if (forceLinuxSoftwareDecode) {
+                    handle.option("hwdec", "no")
+                }
             }
 
             else -> {}
         }
 
 
-        handle.option("hwdec", "auto")
+        val defaultHwdec = if (currentPlatform() is Platform.Linux) "no" else "auto"
+        handle.option("hwdec", defaultHwdec)
         handle.option("hwdec-codecs", hardwareDecoderCodecs)
         // handle.option("tls-verify", "yes")
         // handle.option("tls-ca-file", "${this.context.filesDir.path}/cacert.pem")
@@ -317,6 +331,7 @@ actual class MpvMediampPlayer(
 
     override fun closeImpl() {
         handle.command("stop")
+        playbackState.value = PlaybackState.DESTROYED
         releaseRenderContext()
         handle.destroy()
         handle.close()

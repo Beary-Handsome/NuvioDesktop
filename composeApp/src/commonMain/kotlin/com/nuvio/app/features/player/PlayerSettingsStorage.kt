@@ -112,6 +112,8 @@ internal expect object PlayerSettingsStorage {
     fun saveIosGamma(value: Int)
     fun loadPlayerBackend(): String?
     fun savePlayerBackend(option: String)
+    fun loadMpvConfigPath(): String?
+    fun saveMpvConfigPath(path: String)
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

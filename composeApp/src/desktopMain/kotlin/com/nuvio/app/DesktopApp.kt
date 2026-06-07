@@ -2,7 +2,6 @@ package com.nuvio.app
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
@@ -18,7 +17,6 @@ import androidx.compose.ui.window.rememberWindowState
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.network.SupabaseConfig
-import com.nuvio.app.desktop.GamepadNavigationHandler
 import com.nuvio.app.desktop.DesktopSingleInstanceManager
 import com.nuvio.app.desktop.DesktopBorderlessFullscreenController
 import com.nuvio.app.desktop.DesktopPlayerRegistry
@@ -78,7 +76,7 @@ private fun clampDpSizeToDisplay(size: DpSize): DpSize {
 }
 
 fun main(args: Array<String>) {
-    DesktopRuntimeLog.initialize()
+    DesktopRuntimeLog.initialize(true)
     WindowsNativeBootstrap.configureProcessDpiAwareness()
     DesktopRuntimeLog.installGlobalExceptionHandlers()
     val pid = DesktopRuntimeLog.processPid()
@@ -213,18 +211,12 @@ fun main(args: Array<String>) {
                 val currentDensity = LocalDensity.current
                 val isLinux = System.getProperty("os.name").lowercase().contains("linux")
                 val scaleFactor = if (isLinux) 1.25f else 1.0f
-                
                 CompositionLocalProvider(
                     LocalDensity provides Density(
                         density = currentDensity.density * scaleFactor,
                         fontScale = currentDensity.fontScale * scaleFactor
                     )
                 ) {
-                    val gamepadClickAction = remember { mutableStateOf<(() -> Unit)?>(null) }
-                    GamepadNavigationHandler(
-                        window = window,
-                        gamepadClickAction = gamepadClickAction,
-                    )
                     App()
                 }
             }

@@ -872,6 +872,8 @@
     <string name="streams_resume_from_time">%1$s konumundan devam et</string>
     <string name="streams_size">BOYUT %1$s</string>
     <string name="trailer_close">Fragmanı kapat</string>
+    <string name="trailer_mute">Fragmanı sessize al</string>
+    <string name="trailer_unmute">Fragmanın sesini aç</string>
     <string name="trailer_unable_to_play">Fragman oynatılamıyor</string>
     <string name="trakt_lists_load_failed">Trakt listeleri yüklenemedi</string>
     <string name="trakt_lists_update_failed">Trakt listeleri güncellenemedi</string>

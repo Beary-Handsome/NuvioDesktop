@@ -1163,6 +1163,8 @@
     <string name="external_player_not_configured">Najpierw wybierz zewnętrzny odtwarzacz w ustawieniach</string>
     <string name="external_player_unavailable">Brak dostępnego zewnętrznego odtwarzacza</string>
     <string name="trailer_close">Zamknij zwiastun</string>
+    <string name="trailer_mute">Wycisz zwiastun</string>
+    <string name="trailer_unmute">Włącz dźwięk zwiastuna</string>
     <string name="trailer_unable_to_play">Nie można odtworzyć zwiastuna</string>
     <string name="trakt_lists_load_failed">Nie udało się załadować list Trakt</string>
     <string name="trakt_lists_update_failed">Nie udało się zaktualizować list Trakt</string>

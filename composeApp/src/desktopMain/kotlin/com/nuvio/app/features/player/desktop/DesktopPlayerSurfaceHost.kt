@@ -8,12 +8,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import com.nuvio.app.desktop.DesktopPlayerRegistry
 import com.nuvio.app.desktop.DesktopRuntimeLog
+import com.nuvio.app.features.player.PlayerBackendOption
 import com.nuvio.app.features.player.PlayerEngineController
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerResizeMode
+import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.desktop.nuvio.NuvioDesktopPlayerOverlay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import java.security.MessageDigest
 
@@ -29,6 +34,14 @@ internal fun DesktopPlayerSurfaceHost(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+    onSubtitleClick: (() -> Unit)? = null,
+    onAudioClick: (() -> Unit)? = null,
+    onVideoSettingsClick: (() -> Unit)? = null,
+    onSourcesClick: (() -> Unit)? = null,
+    onEpisodesClick: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+    onResizeModeClick: (() -> Unit)? = null,
+    onSpeedClick: (() -> Unit)? = null,
 ) {
     val sessionKey = remember(sourceUrl, sourceAudioUrl, sourceHeaders, sourceResponseHeaders) {
         listOf(sourceUrl, sourceAudioUrl.orEmpty(), sourceHeaders.hashCode().toString(), sourceResponseHeaders.hashCode().toString())
@@ -102,7 +115,29 @@ internal fun DesktopPlayerSurfaceHost(
         backend.setResizeMode(resizeMode)
     }
 
-    backend.Surface(modifier)
+    val useNuvioOverlay = remember {
+        runCatching { PlayerSettingsRepository.getPlayerBackend() == PlayerBackendOption.NUVIO_PLAYER }
+            .getOrDefault(false)
+    }
+
+    if (useNuvioOverlay) {
+        val state by backend.state.collectAsState()
+        NuvioDesktopPlayerOverlay(
+            state = state,
+            controller = backend.controller,
+            videoSurface = { backend.Surface(modifier) },
+            onSubtitleClick = onSubtitleClick,
+            onAudioClick = onAudioClick,
+            onVideoSettingsClick = onVideoSettingsClick,
+            onSourcesClick = onSourcesClick,
+            onEpisodesClick = onEpisodesClick,
+            onBack = onBack,
+            onResizeModeClick = onResizeModeClick,
+            onSpeedClick = onSpeedClick,
+        )
+    } else {
+        backend.Surface(modifier)
+    }
 }
 
 private fun String.sha256Prefix(): String {

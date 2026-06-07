@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,12 @@ import kotlinx.coroutines.flow.map
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
+private val catalogScrollOffsets = mutableMapOf<String, Int>()
+private val catalogScrollIndices = mutableMapOf<String, Int>()
+
+private fun catalogScrollKey(manifestUrl: String, type: String, catalogId: String, genre: String?): String =
+    "$manifestUrl|$type|$catalogId|${genre ?: ""}"
+
 @Composable
 fun CatalogScreen(
     title: String,
@@ -88,6 +95,26 @@ fun CatalogScreen(
         WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
+    val scrollKey = remember(manifestUrl, type, catalogId, genre) {
+        catalogScrollKey(manifestUrl, type, catalogId, genre)
+    }
+
+    LaunchedEffect(scrollKey) {
+        val savedIndex = catalogScrollIndices[scrollKey]
+        val savedOffset = catalogScrollOffsets[scrollKey]
+        if (savedIndex != null && savedOffset != null && savedIndex > 0) {
+            gridState.scrollToItem(savedIndex, savedOffset)
+        }
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (index, offset) ->
+                catalogScrollIndices[scrollKey] = index
+                catalogScrollOffsets[scrollKey] = offset
+            }
+    }
     var headerHeightPx by remember { mutableIntStateOf(0) }
     var observedOfflineState by remember { mutableStateOf(false) }
 

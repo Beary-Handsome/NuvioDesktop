@@ -209,5 +209,5 @@ data class PlayerPlaybackSnapshot(
 )
 
 enum class PlayerBackendOption {
-    AUTO, MPV, VLC
+    AUTO, MPV, NUVIO_PLAYER
 }

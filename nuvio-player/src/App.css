@@ -1,0 +1,509 @@
+/* =========================================================================
+   Nuvio Player — Dark Theme
+   ========================================================================= */
+
+:root {
+  --bg: #000;
+  --controls-bg: rgba(0, 0, 0, 0.72);
+  --accent: #e5383b;
+  --accent-hover: #ff4d4d;
+  --text: #eee;
+  --text-dim: #999;
+  --bar-height: 4px;
+  --thumb-size: 14px;
+  --control-gap: 8px;
+  --transition: opacity 0.3s ease;
+}
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.app-root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  user-select: none;
+}
+
+.player-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   Title Bar
+   --------------------------------------------------------------------------- */
+
+.title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--controls-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.title-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nuvio-logo {
+  flex-shrink: 0;
+}
+
+.title-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+}
+
+.title-bar-right {
+  display: flex;
+  gap: 4px;
+}
+
+.title-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  width: 36px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.title-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.title-btn-close:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   Video Area (overlay above mpv window)
+   --------------------------------------------------------------------------- */
+
+.video-area {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  opacity: 0.4;
+}
+
+.placeholder-text {
+  font-size: 18px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* Buffering spinner */
+
+.buffering-indicator {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   Controls Overlay (bottom)
+   --------------------------------------------------------------------------- */
+
+.controls-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px 16px 12px;
+  background: linear-gradient(transparent, var(--controls-bg));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 10;
+  transition: var(--transition);
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+  margin-top: 4px;
+}
+
+.controls-spacer {
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Progress Bar
+   --------------------------------------------------------------------------- */
+
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.progress-time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 48px;
+  text-align: center;
+  font-family: system-ui;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.progress-track {
+  width: 100%;
+  height: var(--bar-height);
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: calc(var(--bar-height) / 2);
+  position: relative;
+  overflow: visible;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: calc(var(--bar-height) / 2);
+  transition: width 50ms linear;
+  position: relative;
+}
+
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  background: var(--accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.progress-bar:hover .progress-thumb {
+  opacity: 1;
+}
+
+/* Buffering animation */
+
+.progress-bar.buffering .progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent-hover) 50%,
+    var(--accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   --------------------------------------------------------------------------- */
+
+.ctrl-btn {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.play-btn {
+  width: 44px;
+  height: 44px;
+}
+
+/* ---------------------------------------------------------------------------
+   Playback Controls
+   --------------------------------------------------------------------------- */
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.speed-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 4px;
+  font-family: system-ui;
+}
+
+.speed-select:focus {
+  outline: 1px solid var(--accent);
+}
+
+.speed-select option {
+  background: #222;
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------------------
+   Volume Control
+   --------------------------------------------------------------------------- */
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   Track Selector
+   --------------------------------------------------------------------------- */
+
+.track-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.track-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+}
+
+.track-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: system-ui;
+  max-width: 120px;
+}
+
+.track-select:focus {
+  outline: 1px solid var(--accent);
+}
+
+.track-select option {
+  background: #222;
+}
+
+/* ---------------------------------------------------------------------------
+   Settings Panel
+   --------------------------------------------------------------------------- */
+
+.settings-panel {
+  position: relative;
+}
+
+.settings-dropdown {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 180px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.settings-placeholder {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.settings-section-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 12px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: system-ui;
+}
+
+.settings-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.settings-item.dim {
+  color: var(--text-dim);
+}
+
+.settings-item.dim:hover {
+  color: var(--text);
+}
+
+.settings-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   Center Play/Pause Button
+   --------------------------------------------------------------------------- */
+
+.center-play-btn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.3s ease;
+}
+
+.center-play-btn.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.center-play-btn.visible {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.play-btn-large {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: white;
+}
+
+.play-btn-large:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.1);
+}

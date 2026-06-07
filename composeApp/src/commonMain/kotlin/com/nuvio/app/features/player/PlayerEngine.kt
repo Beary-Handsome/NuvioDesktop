@@ -134,4 +134,12 @@ expect fun PlatformPlayerSurface(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+    onSubtitleClick: (() -> Unit)? = null,
+    onAudioClick: (() -> Unit)? = null,
+    onVideoSettingsClick: (() -> Unit)? = null,
+    onSourcesClick: (() -> Unit)? = null,
+    onEpisodesClick: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+    onResizeModeClick: (() -> Unit)? = null,
+    onSpeedClick: (() -> Unit)? = null,
 )

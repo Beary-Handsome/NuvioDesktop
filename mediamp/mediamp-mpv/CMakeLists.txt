@@ -11,14 +11,14 @@ set(MPV_LIB_PATH "")
 set(MPV_LIB_NAME "")
 
 if(WIN32)
-    add_compile_definitions(_WIN32_WINNT=0x0A00)
+    add_compile_definitions(_WIN32_WINNT=0x0A00 NOMINMAX)
     # Windows
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         # x64
         set(MPV_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libmpv/lib/windows/x86_64")
         set(MPV_LIB_NAME "libmpv-2.lib")
-        set(MPV_LIB_EXTERNAL_AVCODEC_NAME "avcodec-61.lib")
-        set(MPV_LIB_EXTERNAL_SWSCALE_NAME "swscale-8.lib")
+        set(MPV_LIB_EXTERNAL_AVCODEC_NAME "avcodec.lib")
+        set(MPV_LIB_EXTERNAL_SWSCALE_NAME "swscale.lib")
     else()
         message(FATAL_ERROR "only support x86_64 on Windows")
     endif()
@@ -26,15 +26,15 @@ if(WIN32)
     if (MSVC)
         message(STATUS "MSVC detected")
         add_compile_options(/Zc:__cplusplus)
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
     endif ()
 elseif(APPLE)
     # macOS (Darwin)
     if((CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64"))
         set(MPV_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libmpv/lib/macos/${CMAKE_SYSTEM_PROCESSOR}")
         set(MPV_LIB_NAME "libmpv.2.dylib")
-        set(MPV_LIB_EXTERNAL_AVCODEC_NAME "libavcodec.61.19.100.dylib")
-        set(MPV_LIB_EXTERNAL_SWSCALE_NAME "libswscale.8.3.100.dylib")
+        set(MPV_LIB_EXTERNAL_AVCODEC_NAME "libavcodec.62.11.100.dylib")
+        set(MPV_LIB_EXTERNAL_SWSCALE_NAME "libswscale.9.1.100.dylib")
     endif()
 elseif(ANDROID)
     set(ANDROID_STL c++_shared)
@@ -168,6 +168,29 @@ else()
         target_link_libraries(${PROJECT_NAME} PRIVATE
                 EGL GL dl)
     endif()
+endif()
+
+# NuvioImageBridge — Windows WIC-based image decoder (Coil 3 integration)
+option(BUILD_NUVIO_IMAGE_BRIDGE "Build the NuvioImageBridge DLL for Windows image decoding" OFF)
+
+if(WIN32 AND BUILD_NUVIO_IMAGE_BRIDGE)
+    add_library(NuvioImageBridge SHARED
+        "${SRC_PREFIX}/nuvio_image_bridge.cpp"
+    )
+    target_link_libraries(NuvioImageBridge PRIVATE
+        windowscodecs.lib
+        ole32.lib
+    )
+    set_target_properties(NuvioImageBridge PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded"
+    )
+    set(NUVIO_BRIDGE_OUTPUT_DIR $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+    add_custom_command(TARGET NuvioImageBridge POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying NuvioImageBridge.dll to output..."
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:NuvioImageBridge>
+            ${NUVIO_BRIDGE_OUTPUT_DIR}
+    )
 endif()
 
 # 查找所有动态库文件

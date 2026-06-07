@@ -16,8 +16,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.AppIconResource
+import com.nuvio.app.core.ui.appIconPainter
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioImageFilterQuality
 import com.nuvio.app.features.details.MetaDetails
@@ -168,14 +169,18 @@ private fun DetailFloatingHeaderAction(
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-            contentDescription = if (isSaved) {
-                stringResource(Res.string.hero_remove_from_library)
-            } else {
-                stringResource(Res.string.hero_add_to_library)
-            },
-            tint = MaterialTheme.colorScheme.onBackground,
-        )
+        if (isSaved) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = stringResource(Res.string.hero_remove_from_library),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        } else {
+            Icon(
+                painter = appIconPainter(AppIconResource.LibraryAddPlus),
+                contentDescription = stringResource(Res.string.hero_add_to_library),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
     }
 }

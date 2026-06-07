@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -72,6 +75,7 @@ fun TrailerPlayerPopup(
     var playerError by remember(playbackSource?.videoUrl, playbackSource?.audioUrl) {
         mutableStateOf<String?>(null)
     }
+    var volumeEnabled by remember { mutableStateOf(true) }
 
     val activeError = errorMessage ?: playerError
 
@@ -122,6 +126,18 @@ fun TrailerPlayerPopup(
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = stringResource(Res.string.trailer_close),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                IconButton(onClick = { volumeEnabled = !volumeEnabled }) {
+                    Icon(
+                        imageVector = if (volumeEnabled) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                        contentDescription = if (volumeEnabled) {
+                            stringResource(Res.string.trailer_mute)
+                        } else {
+                            stringResource(Res.string.trailer_unmute)
+                        },
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }

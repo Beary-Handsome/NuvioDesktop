@@ -71,6 +71,7 @@ import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
 import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
+import com.nuvio.app.openMpvConfigFile
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
@@ -279,11 +280,18 @@ private fun PlaybackSettingsSection(
                         title = stringResource(Res.string.settings_playback_player_backend),
                         description = when (autoPlayPlayerSettings.playerBackend) {
                             PlayerBackendOption.MPV -> stringResource(Res.string.settings_playback_player_backend_mpv)
-                            PlayerBackendOption.VLC -> stringResource(Res.string.settings_playback_player_backend_vlc)
+                            PlayerBackendOption.NUVIO_PLAYER -> stringResource(Res.string.settings_playback_player_backend_nuvio)
                             PlayerBackendOption.AUTO -> stringResource(Res.string.settings_playback_player_backend_auto)
                         },
                         isTablet = isTablet,
                         onClick = { showPlayerBackendDialog = true },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_playback_mpv_config_path),
+                        description = stringResource(Res.string.settings_playback_mpv_config_path_description),
+                        isTablet = isTablet,
+                        onClick = { openMpvConfigFile() },
                     )
                 }
             }
@@ -2565,7 +2573,7 @@ private fun PlayerBackendSelectionDialog(
     val options = listOf(
         PlayerBackendOption.AUTO to Res.string.settings_playback_player_backend_auto,
         PlayerBackendOption.MPV to Res.string.settings_playback_player_backend_mpv,
-        PlayerBackendOption.VLC to Res.string.settings_playback_player_backend_vlc,
+        PlayerBackendOption.NUVIO_PLAYER to Res.string.settings_playback_player_backend_nuvio,
     )
 
     BasicAlertDialog(

@@ -1231,6 +1231,8 @@
     <string name="external_player_not_configured">Choisis d’abord un lecteur externe dans les paramètres</string>
     <string name="external_player_unavailable">Aucun lecteur externe disponible</string>
     <string name="trailer_close">Fermer la bande-annonce</string>
+    <string name="trailer_mute">Couper le son de la bande-annonce</string>
+    <string name="trailer_unmute">Réactiver le son</string>
     <string name="trailer_unable_to_play">Impossible de lire la bande-annonce</string>
     <string name="trakt_lists_load_failed">Impossible de charger les listes Trakt</string>
     <string name="trakt_lists_update_failed">Impossible de mettre à jour les listes Trakt</string>

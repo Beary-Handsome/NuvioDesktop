@@ -28,9 +28,9 @@ if (-not (Test-Path $LinuxLibDir)) {
 Write-Host "==> Target directory: $LinuxLibDir"
 
 # --- download ---
-# Floating URL that always points to the latest n7.1 gpl-shared build
-$TarballUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n7.1-latest-linux64-gpl-shared-7.1.tar.xz"
-$TarballName = "ffmpeg-n7.1-latest-linux64-gpl-shared-7.1.tar.xz"
+# Floating URL that always points to the latest master gpl-shared build
+$TarballUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl-shared.tar.xz"
+$TarballName = "ffmpeg-master-latest-linux64-gpl-shared.tar.xz"
 $TmpDir = "$RepoRoot/tmp_ffmpeg_download"
 
 try {
@@ -41,6 +41,7 @@ try {
         Write-Host "==> Downloading $TarballUrl ..."
         Invoke-WebRequest -Uri $TarballUrl -OutFile $TarballPath -UseBasicParsing
         Write-Host "    Download complete: $((Get-Item $TarballPath).Length / 1MB -as [int]) MB"
+        Write-Warning "Using master branch build — verify library versions after extraction."
     } else {
         Write-Host "==> Tarball already exists, reusing: $TarballPath"
     }
@@ -74,7 +75,9 @@ try {
         "libavutil.so",
         "libswresample.so",
         "libavfilter.so",
-        "libpostproc.so"
+        "libpostproc.so",
+        "libavcodec.so",
+        "libswscale.so"
     )
     $missing = $expected | Where-Object { -not (Test-Path "$LinuxLibDir/$_") }
     if ($missing) {

@@ -1002,6 +1002,8 @@
     <string name="streams_resume_from_time">Retomar de %1$s</string>
     <string name="streams_size">TAMANHO %1$s</string>
     <string name="trailer_close">Fechar trailer</string>
+    <string name="trailer_mute">Silenciar trailer</string>
+    <string name="trailer_unmute">Ativar som do trailer</string>
     <string name="trailer_unable_to_play">Não foi possível reproduzir o trailer</string>
     <string name="trakt_lists_load_failed">Falha ao carregar as listas do Trakt</string>
     <string name="trakt_lists_update_failed">Falha ao atualizar as listas do Trakt</string>

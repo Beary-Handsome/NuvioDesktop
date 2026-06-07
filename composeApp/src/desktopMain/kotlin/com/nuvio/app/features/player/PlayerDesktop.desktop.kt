@@ -71,6 +71,14 @@ actual fun PlatformPlayerSurface(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+    onSubtitleClick: (() -> Unit)?,
+    onAudioClick: (() -> Unit)?,
+    onVideoSettingsClick: (() -> Unit)?,
+    onSourcesClick: (() -> Unit)?,
+    onEpisodesClick: (() -> Unit)?,
+    onBack: (() -> Unit)?,
+    onResizeModeClick: (() -> Unit)?,
+    onSpeedClick: (() -> Unit)?,
 ) {
     ManageDesktopPlayerFrameTrace()
     if (isMacOS) {
@@ -100,6 +108,14 @@ actual fun PlatformPlayerSurface(
             onControllerReady = onControllerReady,
             onSnapshot = onSnapshot,
             onError = onError,
+            onSubtitleClick = onSubtitleClick,
+            onAudioClick = onAudioClick,
+            onVideoSettingsClick = onVideoSettingsClick,
+            onSourcesClick = onSourcesClick,
+            onEpisodesClick = onEpisodesClick,
+            onBack = onBack,
+            onResizeModeClick = onResizeModeClick,
+            onSpeedClick = onSpeedClick,
         )
     }
 }
@@ -552,6 +568,7 @@ internal actual object PlayerSettingsStorage {
     private const val useLibassKey = "use_libass"
     private const val libassRenderTypeKey = "libass_render_type"
     private const val playerBackendKey = "player_backend"
+    private const val mpvConfigPathKey = "mpv_config_path"
     private val syncKeys = listOf(
         showLoadingOverlayKey,
         resizeModeKey,
@@ -593,6 +610,7 @@ internal actual object PlayerSettingsStorage {
         useLibassKey,
         libassRenderTypeKey,
         playerBackendKey,
+        mpvConfigPathKey,
         iosVideoOutputPresetKey,
         iosToneMappingModeKey,
         iosTargetPrimariesKey,
@@ -847,6 +865,11 @@ internal actual object PlayerSettingsStorage {
         saveString(playerBackendKey, option)
     }
 
+    actual fun loadMpvConfigPath(): String? = loadString(mpvConfigPathKey)
+    actual fun saveMpvConfigPath(path: String) {
+        saveString(mpvConfigPathKey, path)
+    }
+
     // iOS video output settings (desktop uses these keys for sync with mobile)
     private const val iosVideoOutputPresetKey = "ios_video_output_preset"
     private const val iosToneMappingModeKey = "ios_tone_mapping_mode"
@@ -931,6 +954,7 @@ internal actual object PlayerSettingsStorage {
         loadUseLibass()?.let { put(useLibassKey, encodeSyncBoolean(it)) }
         loadLibassRenderType()?.let { put(libassRenderTypeKey, encodeSyncString(it)) }
         loadPlayerBackend()?.let { put(playerBackendKey, encodeSyncString(it)) }
+        loadMpvConfigPath()?.let { put(mpvConfigPathKey, encodeSyncString(it)) }
         loadIosVideoOutputPreset()?.let { put(iosVideoOutputPresetKey, encodeSyncString(it)) }
         loadIosToneMappingMode()?.let { put(iosToneMappingModeKey, encodeSyncString(it)) }
         loadIosTargetPrimaries()?.let { put(iosTargetPrimariesKey, encodeSyncString(it)) }
@@ -989,6 +1013,7 @@ internal actual object PlayerSettingsStorage {
         payload.decodeSyncBoolean(useLibassKey)?.let(::saveUseLibass)
         payload.decodeSyncString(libassRenderTypeKey)?.let(::saveLibassRenderType)
         payload.decodeSyncString(playerBackendKey)?.let(::savePlayerBackend)
+        payload.decodeSyncString(mpvConfigPathKey)?.let(::saveMpvConfigPath)
         payload.decodeSyncString(iosVideoOutputPresetKey)?.let(::saveIosVideoOutputPreset)
         payload.decodeSyncString(iosToneMappingModeKey)?.let(::saveIosToneMappingMode)
         payload.decodeSyncString(iosTargetPrimariesKey)?.let(::saveIosTargetPrimaries)

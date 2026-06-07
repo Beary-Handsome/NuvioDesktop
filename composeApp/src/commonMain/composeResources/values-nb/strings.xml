@@ -1172,6 +1172,8 @@
     <string name="external_player_not_configured">Velg en ekstern avspiller i innstillinger først</string>
     <string name="external_player_unavailable">Ingen ekstern avspiller er tilgjengelig</string>
     <string name="trailer_close">Lukk trailer</string>
+    <string name="trailer_mute">Demp trailer</string>
+    <string name="trailer_unmute">Slå på lyd for trailer</string>
     <string name="trailer_unable_to_play">Kan ikke spille trailer</string>
     <string name="trakt_lists_load_failed">Kunne ikke laste Trakt-lister</string>
     <string name="trakt_lists_update_failed">Kunne ikke oppdatere Trakt-lister</string>

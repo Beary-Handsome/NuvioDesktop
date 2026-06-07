@@ -29,6 +29,7 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.SurfaceOrigin
 import org.openani.mediamp.InternalMediampApi
+import org.openani.mediamp.PlaybackState
 import org.openani.mediamp.mpv.MpvMediampPlayer
 import org.openani.mediamp.mpv.utils.OpenGLComponentProvider
 import org.openani.mediamp.mpv.utils.findSkiaLayer
@@ -164,6 +165,7 @@ actual fun MpvMediampPlayerSurface(
         interpolator.updateSubscription
 
         if (components == null) return@Canvas
+        if (player.getCurrentPlaybackState() == PlaybackState.DESTROYED) return@Canvas
         val skiaCanvas = drawContext.canvas.nativeCanvas
         val currentContextSignature = components.contextSignature
         val contentScale = components.contentScale.takeIf { it.isFinite() && it > 0f } ?: 1f

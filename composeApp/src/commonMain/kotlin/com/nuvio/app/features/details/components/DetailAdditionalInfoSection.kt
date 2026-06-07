@@ -18,7 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.features.details.MetaDetails
-import com.nuvio.app.features.details.formatRuntimeForDisplay
+import com.nuvio.app.features.details.formatRuntimeForDisplayComposable
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -34,12 +34,13 @@ fun DetailAdditionalInfoSection(
     } else {
         stringResource(Res.string.details_movie_details)
     }
-    val rows = buildList {
+        val runtimeText = formatRuntimeForDisplayComposable(meta.runtime)
+        val rows = buildList {
         meta.status?.let { add(stringResource(Res.string.details_status) to it) }
         meta.releaseInfo?.let {
             add(stringResource(Res.string.details_release_info) to formatReleaseDateForDisplay(it))
         }
-        formatRuntimeForDisplay(meta.runtime)?.let {
+        runtimeText?.let {
             add(stringResource(Res.string.details_runtime) to it)
         }
         meta.ageRating?.let { add(stringResource(Res.string.details_certification) to it) }
