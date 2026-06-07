@@ -82,6 +82,7 @@ pub fn run() {
             player::commands::set_subtitle_delay,
             player::commands::set_audio_delay,
             player::commands::set_hwdec,
+            player::commands::open_mpv_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nuvio-player");

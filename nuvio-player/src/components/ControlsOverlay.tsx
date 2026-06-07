@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from "react";
-import { Maximize, Minimize } from "lucide-react";
+import { Maximize, Minimize, FileText } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import ProgressBar from "./ProgressBar";
 import PlaybackControls from "./PlaybackControls";
 import VolumeControl from "./VolumeControl";
@@ -90,6 +91,9 @@ export default function ControlsOverlay({
           onOpenChange={onMenuOpenChange}
           onSettingsClick={onSettingsClick}
         />
+        <button className="ctrl-btn" onClick={() => invoke("open_mpv_config")} title="Edit mpv.conf">
+          <FileText size={20} />
+        </button>
         <button className="ctrl-btn" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
           {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
         </button>

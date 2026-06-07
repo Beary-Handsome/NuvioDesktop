@@ -137,3 +137,48 @@ pub fn set_audio_delay(
 ) -> Result<(), String> {
     player.set_audio_delay(delay_ms)
 }
+
+#[tauri::command]
+pub fn open_mpv_config() -> Result<(), String> {
+    let config_dir = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .map(|a| std::path::PathBuf::from(a).join("mpv"))
+            .map_err(|e| format!("APPDATA not set: {e}"))
+    } else {
+        let home = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
+        Ok(std::path::PathBuf::from(home).join(".config").join("mpv"))
+    }?;
+
+    std::fs::create_dir_all(&config_dir).map_err(|e| format!("mkdir: {e}"))?;
+
+    let config_file = config_dir.join("mpv.conf");
+    if !config_file.exists() {
+        let template = concat!(
+            "# MPV Configuration for Nuvio Player\n",
+            "# Add your mpv options here (one per line), e.g.:\n",
+            "# hwdec=auto\n",
+            "# profile=gpu-hq\n",
+            "\n"
+        );
+        std::fs::write(&config_file, template).map_err(|e| format!("write: {e}"))?;
+    }
+
+    if cfg!(target_os = "windows") {
+        std::process::Command::new("notepad.exe")
+            .arg(config_file.as_os_str())
+            .spawn()
+            .map_err(|e| format!("launch notepad: {e}"))?;
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+            .arg(config_file.as_os_str())
+            .spawn()
+            .map_err(|e| format!("launch open: {e}"))?;
+    } else {
+        std::process::Command::new("xdg-open")
+            .arg(config_file.as_os_str())
+            .spawn()
+            .map_err(|e| format!("launch xdg-open: {e}"))?;
+    }
+
+    Ok(())
+}
