@@ -108,7 +108,8 @@ jobs:
             # Remove hardcoded OPENGL — Skiko auto-detects the right renderer
             sed -i '/skiko.renderApi=OPENGL/d' "$CFG"
             echo "Patched Nuvio.cfg:"
-            grep -E "java.library.path|skiko" "$CFG"
+            grep -E "java.library.path|skiko" "$CFG" || true
+          fi
 
       - name: Create Linux launcher wrapper (XWayland + OpenGL)
         continue-on-error: true
