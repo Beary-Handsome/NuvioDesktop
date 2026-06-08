@@ -87,7 +87,7 @@ class OpenGLComponentProvider(private val skiaLayer: SkiaLayer) {
     }
     val contextSignature: String get() = "$glDevice:$glContext:$glDrawable"
     val contentScale: Float get() = skiaLayer.contentScale
-    val currentDpi: Int get() = skiaLayer.currentDPI
+    val currentDpi: Int get() = (contentScale * 96).toInt()
 
     val directContext: DirectContext
         get() = (contextHandlerHandleField.get(redrawer) as OpenGLContextHandler)
