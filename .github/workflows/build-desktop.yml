@@ -117,6 +117,7 @@ jobs:
           APP_DIR=$(find composeApp/build/compose/binaries -maxdepth 4 -name "Nuvio" -type d 2>/dev/null | head -1)
           if [ -n "$APP_DIR" ]; then
             mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
+            cp "$APP_DIR/lib/app/Nuvio.cfg" "$APP_DIR/lib/app/Nuvio.real.cfg"
             printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
