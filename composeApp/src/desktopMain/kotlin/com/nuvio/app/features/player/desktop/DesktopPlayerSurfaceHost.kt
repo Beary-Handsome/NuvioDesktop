@@ -18,8 +18,10 @@ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerResizeMode
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.desktop.nuvio.NuvioDesktopPlayerOverlay
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import java.security.MessageDigest
 
 @Composable
@@ -105,9 +107,15 @@ internal fun DesktopPlayerSurfaceHost(
         }
     }
 
-    LaunchedEffect(playWhenReady, backend, sessionKey) {
+    // Only react to playWhenReady CHANGES after initial load (drop the first emission
+    // to avoid racing with the load LaunchedEffect which already handles playWhenReady)
+    LaunchedEffect(backend, sessionKey) {
         if (sessionKey != activeSessionKey) return@LaunchedEffect
-        if (playWhenReady) backend.controller.play() else backend.controller.pause()
+        snapshotFlow { playWhenReady }
+            .drop(1)
+            .collect { shouldPlay ->
+                if (shouldPlay) backend.controller.play() else backend.controller.pause()
+            }
     }
 
     LaunchedEffect(resizeMode, backend, sessionKey) {

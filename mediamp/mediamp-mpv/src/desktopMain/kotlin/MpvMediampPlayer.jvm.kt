@@ -290,7 +290,7 @@ actual class MpvMediampPlayer(
         when (playbackState.value) {
             PlaybackState.READY -> {
                 val media = openResource.value ?: return
-                handle.option("pause", "true")
+                handle.option("pause", "no")
                 when (val data = media.mediaData) {
                     is UriMediaData -> {
                         handle.command("loadfile", data.uri)
