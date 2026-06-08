@@ -105,10 +105,30 @@ jobs:
           if [ -n "$CFG" ]; then
             # Replace the CI runner's java.library.path with $APPDIR/native
             sed -i 's|java-options=-Djava.library.path=.*|java-options=-Djava.library.path=$APPDIR/native|' "$CFG"
-            # Remove hardcoded OPENGL — let Skiko auto-detect (falls back SOFTWARE on Wayland)
+            # Remove hardcoded OPENGL — Skiko auto-detects the right renderer
             sed -i '/skiko.renderApi=OPENGL/d' "$CFG"
             echo "Patched Nuvio.cfg:"
             grep -E "java.library.path|skiko" "$CFG"
+
+      - name: Create Linux launcher wrapper (XWayland + OpenGL)
+        continue-on-error: true
+        run: |
+          APP_DIR=$(find composeApp/build/compose/binaries -maxdepth 4 -name "Nuvio" -type d 2>/dev/null | head -1)
+          if [ -n "$APP_DIR" ]; then
+            # Rename the real binary
+            mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
+            # Create wrapper script that forces X11 backend (Skiko crashes on Wayland)
+            cat > "$APP_DIR/bin/Nuvio" << 'WRAPPER'
+#!/bin/bash
+# Force XWayland — Skiko's OpenGL DPI detection crashes on native Wayland
+export GDK_BACKEND=x11
+export _JAVA_AWT_WM_NONREPARENTING=1
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/Nuvio.real" "$@"
+WRAPPER
+            chmod +x "$APP_DIR/bin/Nuvio"
+            echo "Created Nuvio launcher wrapper"
+          fi
           fi
 
       - name: Bundle native binaries into AppImage
