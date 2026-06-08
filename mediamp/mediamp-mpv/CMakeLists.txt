@@ -120,6 +120,15 @@ add_library(${PROJECT_NAME} SHARED
 )
 target_include_directories(${PROJECT_NAME} PRIVATE "${SRC_PREFIX}/include")
 
+# Set RPATH to $ORIGIN so libmediampv.so finds sibling .so deps at runtime
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_RPATH_USE_ORIGIN ON
+    )
+endif()
+
 ## link project
 if (ANDROID)
     target_link_libraries(${PROJECT_NAME} PRIVATE 

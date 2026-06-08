@@ -50,6 +50,13 @@ internal object MpvRuntimeBootstrap {
             }
         }
 
+        // Pre-load transitive native deps so the OS linker can resolve them
+        // when System.load() loads libmediampv.so. Without this, the JVM's
+        // native loader won't find sibling .so files even with java.library.path set.
+        if (isOsLinux()) {
+            preloadTransitiveDeps(directory)
+        }
+
         val libraryFile = directory.resolve(runtimeLibraryName())
         return runCatching {
             System.load(libraryFile.absolutePath)
@@ -72,6 +79,35 @@ internal object MpvRuntimeBootstrap {
                 }
             },
         )
+    }
+
+    /**
+     * Pre-load the shared libraries that libmediampv.so depends on.
+     * Order matters: load leaf deps first (avutil), then libs that depend on them.
+     */
+    private fun preloadTransitiveDeps(directory: File) {
+        // Load order: leaves first, then dependents
+        val depNames = listOf(
+            "libavutil.so",
+            "libswresample.so",
+            "libavcodec.so",
+            "libswscale.so",
+            "libavformat.so",
+            "libavfilter.so",
+            "libplacebo.so",
+            "libmpv.so",
+        )
+        for (name in depNames) {
+            val lib = directory.resolve(name)
+            if (lib.isFile) {
+                runCatching { System.load(lib.absolutePath) }
+                    .onSuccess { DesktopRuntimeLog.info("MPV preload OK: ${lib.name}") }
+                    .onFailure { e ->
+                        // Not fatal — the RPATH or LD_LIBRARY_PATH may still resolve it
+                        DesktopRuntimeLog.warn("MPV preload skip: ${lib.name} (${e.message?.take(120)})")
+                    }
+            }
+        }
     }
 
     private fun prependJavaLibraryPath(directory: File) {

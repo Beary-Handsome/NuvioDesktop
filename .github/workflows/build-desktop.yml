@@ -105,7 +105,7 @@ jobs:
             # Bundle the FFmpeg/libmpv libs that libmediampv.so links against
             BUNDLED_LIBS="mediamp/mediamp-mpv/libmpv/lib/linux/x86_64"
             if [ -d "$BUNDLED_LIBS" ]; then
-              for lib in libmpv.so.2 libavcodec.so.62 libavformat.so.62 libavutil.so.60 libswscale.so.8 libswresample.so.5 libavfilter.so.11 libplacebo.so.360; do
+              for lib in libmpv.so.2 libavcodec.so.62 libavformat.so.62 libavutil.so.60 libswscale.so.9 libswresample.so.6 libavfilter.so.11 libplacebo.so.360; do
                 [ -f "$BUNDLED_LIBS/$lib" ] && cp "$BUNDLED_LIBS/$lib" "$NATIVE_DIR/" && echo "  $lib -> $NATIVE_DIR"
               done
               # Also copy unversioned symlinks
