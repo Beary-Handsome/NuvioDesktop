@@ -86,9 +86,20 @@ object NuvioPlayerLauncher {
             ?: File(NuvioPlayerLauncher::class.java.protectionDomain.codeSource.location.toURI())
                 .parentFile?.absolutePath
         if (appDir != null) {
-            val bundled = File(appDir, binaryName)
-            if (bundled.exists()) {
-                bundled.absolutePath.also { cachedBinaryPath = it }; return cachedBinaryPath!!
+            // Check the resources dir itself, parent, sibling bin/, and up to app root
+            val searchDirs = listOfNotNull(
+                appDir,
+                File(appDir).parent,
+                File(appDir, "..").canonicalPath,
+                File(appDir, "../bin").canonicalPath,
+                File(appDir, "../../bin").canonicalPath,
+                File(appDir, "../..").canonicalPath,
+            )
+            for (dir in searchDirs) {
+                val bundled = File(dir, binaryName)
+                if (bundled.exists()) {
+                    bundled.absolutePath.also { cachedBinaryPath = it }; return cachedBinaryPath!!
+                }
             }
         }
 
