@@ -97,6 +97,18 @@ jobs:
         run: ./gradlew :composeApp:packageAppImage
         continue-on-error: true
 
+      - name: Patch Nuvio.cfg java.library.path for portable install
+        continue-on-error: true
+        run: |
+          CFG=$(find composeApp/build/compose/binaries -name "Nuvio.cfg" 2>/dev/null | head -1)
+          echo "Nuvio.cfg: $CFG"
+          if [ -n "$CFG" ]; then
+            # Replace the CI runner's java.library.path with $APPDIR/native
+            sed -i 's|java-options=-Djava.library.path=.*|java-options=-Djava.library.path=$APPDIR/native|' "$CFG"
+            echo "Patched java.library.path:"
+            grep "java.library.path" "$CFG"
+          fi
+
       - name: Bundle native binaries into AppImage
         continue-on-error: true
         run: |
