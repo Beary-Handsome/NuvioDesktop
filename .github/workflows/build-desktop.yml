@@ -105,8 +105,10 @@ jobs:
           if [ -n "$CFG" ]; then
             # Replace the CI runner's java.library.path with $APPDIR/native
             sed -i 's|java-options=-Djava.library.path=.*|java-options=-Djava.library.path=$APPDIR/native|' "$CFG"
-            echo "Patched java.library.path:"
-            grep "java.library.path" "$CFG"
+            # Remove hardcoded OPENGL — let Skiko auto-detect (falls back SOFTWARE on Wayland)
+            sed -i '/skiko.renderApi=OPENGL/d' "$CFG"
+            echo "Patched Nuvio.cfg:"
+            grep -E "java.library.path|skiko" "$CFG"
           fi
 
       - name: Bundle native binaries into AppImage
