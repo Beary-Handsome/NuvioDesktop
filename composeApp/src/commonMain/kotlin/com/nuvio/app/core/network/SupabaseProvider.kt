@@ -10,8 +10,8 @@ object SupabaseProvider {
         get() = SupabaseConfig.URL.isNotBlank() && SupabaseConfig.ANON_KEY.isNotBlank()
 
     val client by lazy {
-        check(isConfigured) {
-            "Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in local.properties."
+        if (!isConfigured) {
+            error("Supabase is not configured — running in offline/standalone mode.")
         }
         createSupabaseClient(
             supabaseUrl = SupabaseConfig.URL,
@@ -21,5 +21,10 @@ object SupabaseProvider {
             install(Postgrest)
             install(Functions)
         }
+    }
+
+    val clientOrNull by lazy {
+        if (!isConfigured) null
+        else runCatching { client }.getOrNull()
     }
 }

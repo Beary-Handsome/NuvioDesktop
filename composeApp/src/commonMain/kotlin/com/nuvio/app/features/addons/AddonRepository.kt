@@ -118,6 +118,11 @@ object AddonRepository {
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = resolveEffectiveProfileId(profileId)
         log.i { "pullFromServer() — profileId=$profileId, initialized=$initialized, pulledFromServer=$pulledFromServer" }
+        if (!SupabaseProvider.isConfigured) {
+            log.i { "pullFromServer() — Supabase not configured, using local addons only" }
+            initialize()
+            return
+        }
         runCatching {
             val rows = SupabaseProvider.client.postgrest
                 .from("addons")
@@ -387,6 +392,7 @@ object AddonRepository {
     }
 
     private fun pushToServer() {
+        if (!SupabaseProvider.isConfigured) return
         scope.launch {
             runCatching {
                 if (isUsingPrimaryAddonsFromSecondaryProfile()) {
