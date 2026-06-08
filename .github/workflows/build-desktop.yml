@@ -115,17 +115,8 @@ jobs:
         run: |
           APP_DIR=$(find composeApp/build/compose/binaries -maxdepth 4 -name "Nuvio" -type d 2>/dev/null | head -1)
           if [ -n "$APP_DIR" ]; then
-            # Rename the real binary
             mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
-            # Create wrapper script that forces X11 backend (Skiko crashes on Wayland)
-            cat > "$APP_DIR/bin/Nuvio" << 'WRAPPER'
-#!/bin/bash
-# Force XWayland — Skiko's OpenGL DPI detection crashes on native Wayland
-export GDK_BACKEND=x11
-export _JAVA_AWT_WM_NONREPARENTING=1
-DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$DIR/Nuvio.real" "$@"
-WRAPPER
+            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
           fi
