@@ -21,7 +21,10 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "TRAKT_CLIENT_ID=b63065734283312676aca5abef66d3b4c60e49d3fb9f7d90c67519fc180bc50c" >> local.properties
+          echo "TRAKT_CLIENT_SECRET=788792ac0548901aa63fd2273f4e7b57bde4d688122c37f693c0ac9cc0f6c768" >> local.properties
 
       - name: Install Linux dependencies
         run: |
