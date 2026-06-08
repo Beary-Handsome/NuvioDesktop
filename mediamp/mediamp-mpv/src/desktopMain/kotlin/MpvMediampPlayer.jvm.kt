@@ -178,10 +178,13 @@ actual class MpvMediampPlayer(
             }
 
             is Platform.Linux -> {
-                val sessionType = System.getenv("XDG_SESSION_TYPE")?.lowercase() ?: ""
-                val isWayland = sessionType == "wayland" || System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true
+                // When GDK_BACKEND=x11 is set (our launcher wrapper), the app
+                // runs under XWayland even on Wayland sessions. In that case
+                // MPV must use x11egl, not wayland, for its GPU context.
+                val gdkBackend = System.getenv("GDK_BACKEND")?.lowercase() ?: ""
                 val gpuContext = when {
-                    isWayland -> "wayland"
+                    gdkBackend == "x11" -> "x11egl"
+                    System.getenv("WAYLAND_DISPLAY")?.isNotEmpty() == true -> "wayland"
                     System.getenv("DISPLAY")?.isNotEmpty() == true -> "x11egl"
                     else -> "auto"
                 }
