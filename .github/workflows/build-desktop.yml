@@ -129,7 +129,6 @@ WRAPPER
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
           fi
-          fi
 
       - name: Bundle native binaries into AppImage
         continue-on-error: true
