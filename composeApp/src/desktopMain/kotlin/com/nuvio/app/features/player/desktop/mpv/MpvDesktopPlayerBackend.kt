@@ -117,10 +117,7 @@ internal class MpvDesktopPlayerBackend private constructor(
         applyCursorSettings()
         startFreezeWatchdog()
         val initialTuning = loadDesktopMpvVideoTuning()
-        val effectiveHwdec = if (isOsLinux() &&
-            System.getProperty("nuvio.mpv.diagnostic.hwdec") == null &&
-            System.getenv("NUVIO_MPV_DIAGNOSTIC_HWDEC") == null
-        ) "no(linux-forced)" else initialTuning.settings.hardwareDecoderMode.mpvValue
+        val effectiveHwdec = initialTuning.settings.hardwareDecoderMode.mpvValue
         val marker = WatchdogMarkerV8
         DesktopRuntimeLog.info("$marker $marker $marker")
         DesktopRuntimeLog.info(

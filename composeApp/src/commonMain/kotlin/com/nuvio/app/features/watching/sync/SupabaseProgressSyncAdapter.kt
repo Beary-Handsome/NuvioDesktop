@@ -68,7 +68,8 @@ object SupabaseProgressSyncAdapter : ProgressSyncAdapter {
             put("p_profile_id", profileId)
             put("p_entries", json.encodeToJsonElement(syncEntries))
         }
-        SupabaseProvider.client.postgrest.rpc("sync_push_watch_progress", params)
+        val supabase = SupabaseProvider.clientOrNull ?: return
+        supabase.postgrest.rpc("sync_push_watch_progress", params)
     }
 
     override suspend fun delete(
