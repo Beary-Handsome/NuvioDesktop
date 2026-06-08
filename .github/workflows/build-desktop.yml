@@ -68,14 +68,23 @@ jobs:
         continue-on-error: true
 
       - name: Bundle nuvio-player into AppImage
+        continue-on-error: true
         run: |
-          APP_DIR=$(find composeApp/build/compose/binaries -name "Nuvio" -type d 2>/dev/null | head -1)
-          if [ -n "$APP_DIR" ] && [ -f "composeApp/resources/linux/nuvio-player" ]; then
-            cp composeApp/resources/linux/nuvio-player "$APP_DIR/lib/app/nuvio-player" 2>/dev/null || \
-            cp composeApp/resources/linux/nuvio-player "$APP_DIR/bin/nuvio-player" 2>/dev/null || \
-            cp composeApp/resources/linux/nuvio-player "$APP_DIR/nuvio-player" 2>/dev/null
-            chmod +x "$APP_DIR/lib/app/nuvio-player" "$APP_DIR/bin/nuvio-player" "$APP_DIR/nuvio-player" 2>/dev/null
-            echo "Bundled nuvio-player into $APP_DIR"
+          echo "Looking for AppImage directory..."
+          find composeApp/build/compose/binaries -type d 2>/dev/null | head -20
+          echo "---"
+          echo "Looking for nuvio-player binary..."
+          find . -name "nuvio-player" -type f 2>/dev/null | head -5
+          echo "---"
+          APP_DIR=$(find composeApp/build/compose/binaries -maxdepth 4 -name "Nuvio" -type d 2>/dev/null | head -1)
+          PLAYER=$(find . -name "nuvio-player" -not -path "*/src/*" -not -path "*/node_modules/*" -type f 2>/dev/null | head -1)
+          if [ -n "$APP_DIR" ] && [ -n "$PLAYER" ]; then
+            for dest in "$APP_DIR/lib/app" "$APP_DIR/bin" "$APP_DIR"; do
+              mkdir -p "$dest" 2>/dev/null
+              cp "$PLAYER" "$dest/nuvio-player" && chmod +x "$dest/nuvio-player" && echo "Copied to $dest" || true
+            done
+          else
+            echo "AppImage dir: '$APP_DIR', Player: '$PLAYER' — skipping bundle"
           fi
 
       - name: Upload UberJar
