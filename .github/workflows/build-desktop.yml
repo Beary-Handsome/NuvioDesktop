@@ -67,25 +67,33 @@ jobs:
         run: ./gradlew :composeApp:packageAppImage
         continue-on-error: true
 
-      - name: Bundle nuvio-player into AppImage
+      - name: Bundle native binaries into AppImage
         continue-on-error: true
         run: |
-          echo "Looking for AppImage directory..."
-          find composeApp/build/compose/binaries -type d 2>/dev/null | head -20
-          echo "---"
-          echo "Looking for nuvio-player binary..."
-          find . -name "nuvio-player" -type f 2>/dev/null | head -5
-          echo "---"
           APP_DIR=$(find composeApp/build/compose/binaries -maxdepth 4 -name "Nuvio" -type d 2>/dev/null | head -1)
+          echo "AppImage dir: $APP_DIR"
+
+          # Bundle nuvio-player
           PLAYER=$(find . -name "nuvio-player" -not -path "*/src/*" -not -path "*/node_modules/*" -type f 2>/dev/null | head -1)
           if [ -n "$APP_DIR" ] && [ -n "$PLAYER" ]; then
             for dest in "$APP_DIR/lib/app" "$APP_DIR/bin" "$APP_DIR"; do
-              mkdir -p "$dest" 2>/dev/null
-              cp "$PLAYER" "$dest/nuvio-player" && chmod +x "$dest/nuvio-player" && echo "Copied to $dest" || true
+              mkdir -p "$dest"
+              cp "$PLAYER" "$dest/nuvio-player" && chmod +x "$dest/nuvio-player" && echo "nuvio-player -> $dest" || true
             done
-          else
-            echo "AppImage dir: '$APP_DIR', Player: '$PLAYER' — skipping bundle"
           fi
+
+          # Bundle libmediampv.so (MPV JNI bridge - the ACTUAL library the player needs)
+          MEDIAMPV=$(find . -name "libmediampv.so" -not -path "*/src/*" -type f 2>/dev/null | head -1)
+          echo "libmediampv.so: $MEDIAMPV"
+          if [ -n "$APP_DIR" ] && [ -n "$MEDIAMPV" ]; then
+            for dest in "$APP_DIR/lib/app/native" "$APP_DIR/lib/app" "$APP_DIR/native" "$APP_DIR/bin"; do
+              mkdir -p "$dest"
+              cp "$MEDIAMPV" "$dest/libmediampv.so" && echo "libmediampv.so -> $dest" || true
+            done
+          fi
+
+          echo "=== Final native files ==="
+          find "$APP_DIR" \( -name "nuvio-player" -o -name "libmediampv*" -o -name "*.so" \) 2>/dev/null
 
       - name: Upload UberJar
         uses: actions/upload-artifact@v4
