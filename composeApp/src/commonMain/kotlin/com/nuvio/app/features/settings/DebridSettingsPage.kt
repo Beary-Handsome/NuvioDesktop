@@ -228,6 +228,7 @@ internal fun LazyListScope.debridSettingsContent(
                             when (provider.authMethod) {
                                 DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthProviderId = provider.id
                                 DebridProviderAuthMethod.ApiKey -> activeApiKeyProviderId = provider.id
+                                DebridProviderAuthMethod.BasicAuth -> activeApiKeyProviderId = provider.id
                             }
                         },
                     )
@@ -1674,6 +1675,7 @@ private fun providerCredentialStatus(
     when (provider.authMethod) {
         DebridProviderAuthMethod.DeviceCode -> if (credential.isBlank()) notSetLabel else connectedLabel
         DebridProviderAuthMethod.ApiKey -> maskDebridApiKey(credential, notSetLabel)
+        DebridProviderAuthMethod.BasicAuth -> if (credential.isBlank()) notSetLabel else connectedLabel
     }
 
 @Composable
