@@ -25,6 +25,7 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "TRAKT_CLIENT_ID=b63065734283312676aca5abef66d3b4c60e49d3fb9f7d90c67519fc180bc50c" >> local.properties
           echo "TRAKT_CLIENT_SECRET=788792ac0548901aa63fd2273f4e7b57bde4d688122c37f693c0ac9cc0f6c768" >> local.properties
+          echo "TRAKT_REDIRECT_URI=urn:ietf:wg:oauth:2.0:oob" >> local.properties
 
       - name: Install Linux dependencies
         run: |
@@ -65,6 +66,17 @@ jobs:
       - name: Build Desktop AppImage
         run: ./gradlew :composeApp:packageAppImage
         continue-on-error: true
+
+      - name: Bundle nuvio-player into AppImage
+        run: |
+          APP_DIR=$(find composeApp/build/compose/binaries -name "Nuvio" -type d 2>/dev/null | head -1)
+          if [ -n "$APP_DIR" ] && [ -f "composeApp/resources/linux/nuvio-player" ]; then
+            cp composeApp/resources/linux/nuvio-player "$APP_DIR/lib/app/nuvio-player" 2>/dev/null || \
+            cp composeApp/resources/linux/nuvio-player "$APP_DIR/bin/nuvio-player" 2>/dev/null || \
+            cp composeApp/resources/linux/nuvio-player "$APP_DIR/nuvio-player" 2>/dev/null
+            chmod +x "$APP_DIR/lib/app/nuvio-player" "$APP_DIR/bin/nuvio-player" "$APP_DIR/nuvio-player" 2>/dev/null
+            echo "Bundled nuvio-player into $APP_DIR"
+          fi
 
       - name: Upload UberJar
         uses: actions/upload-artifact@v4
