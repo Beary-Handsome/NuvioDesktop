@@ -84,28 +84,30 @@ internal object MpvRuntimeBootstrap {
     /**
      * Pre-load the shared libraries that libmediampv.so depends on.
      * Order matters: load leaf deps first (avutil), then libs that depend on them.
+     * Tries versioned names first (the real files), then unversioned (may be symlinks).
      */
     private fun preloadTransitiveDeps(directory: File) {
-        // Load order: leaves first, then dependents
-        val depNames = listOf(
-            "libavutil.so",
-            "libswresample.so",
-            "libavcodec.so",
-            "libswscale.so",
-            "libavformat.so",
-            "libavfilter.so",
-            "libplacebo.so",
-            "libmpv.so",
+        // Each entry: list of candidate names in priority order (versioned first)
+        val deps = listOf(
+            listOf("libavutil.so.60.32.100", "libavutil.so.60", "libavutil.so"),
+            listOf("libswresample.so.6.4.100", "libswresample.so.6", "libswresample.so"),
+            listOf("libavcodec.so.62.36.101", "libavcodec.so.62", "libavcodec.so"),
+            listOf("libswscale.so.9.8.100", "libswscale.so.9", "libswscale.so"),
+            listOf("libavformat.so.62.19.101", "libavformat.so.62", "libavformat.so"),
+            listOf("libavfilter.so.11.17.100", "libavfilter.so.11", "libavfilter.so"),
+            listOf("libplacebo.so.360", "libplacebo.so"),
+            listOf("libmpv.so.2.5.0", "libmpv.so.2", "libmpv.so"),
         )
-        for (name in depNames) {
-            val lib = directory.resolve(name)
-            if (lib.isFile) {
+        for (candidates in deps) {
+            val lib = candidates.map { directory.resolve(it) }.firstOrNull { it.isFile }
+            if (lib != null) {
                 runCatching { System.load(lib.absolutePath) }
                     .onSuccess { DesktopRuntimeLog.info("MPV preload OK: ${lib.name}") }
                     .onFailure { e ->
-                        // Not fatal — the RPATH or LD_LIBRARY_PATH may still resolve it
                         DesktopRuntimeLog.warn("MPV preload skip: ${lib.name} (${e.message?.take(120)})")
                     }
+            } else {
+                DesktopRuntimeLog.warn("MPV preload miss: none of $candidates found in ${directory.safePath()}")
             }
         }
     }

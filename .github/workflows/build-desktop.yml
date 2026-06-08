@@ -39,11 +39,29 @@ jobs:
       - name: Symlink bundled FFmpeg/libmpv for linker
         run: |
           BUNDLED=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/lib/linux/x86_64
-          for lib in libmpv.so libmpv.so.2 libavcodec.so libavformat.so libavutil.so libswscale.so libswresample.so libavfilter.so libplacebo.so; do
-            [ -f "$BUNDLED/$lib" ] && sudo ln -sf "$BUNDLED/$lib" "/usr/lib/x86_64-linux-gnu/$lib" && echo "linked $lib"
+          SYSLIB=/usr/lib/x86_64-linux-gnu
+
+          # Copy real (non-symlink) versioned .so files into system path
+          find "$BUNDLED" -maxdepth 1 -name "*.so*" -not -type l -type f | while read -r lib; do
+            sudo cp "$lib" "$SYSLIB/" && echo "copied $(basename $lib)"
           done
-          sudo ldconfig 2>/dev/null || true \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+          # Create soname symlinks the linker needs
+          cd "$SYSLIB"
+          for real in libavcodec.so.62.36.101 libavformat.so.62.19.101 libavutil.so.60.32.100 \
+                      libswscale.so.9.8.100 libswresample.so.6.4.100 libavfilter.so.11.17.100; do
+            if [ -f "$real" ]; then
+              base="${real%.*.*}"
+              short=$(echo "$real" | sed 's/\(lib[^.]*\.so\).*/\1/')
+              sudo ln -sf "$real" "$base"
+              sudo ln -sf "$real" "$short"
+            fi
+          done
+          [ -f libmpv.so.2.5.0 ] && sudo ln -sf libmpv.so.2.5.0 libmpv.so.2 && sudo ln -sf libmpv.so.2.5.0 libmpv.so
+          [ -f libplacebo.so.360 ] && sudo ln -sf libplacebo.so.360 libplacebo.so
+          cd -
+
+          sudo ldconfig 2>/dev/null || true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -103,15 +121,40 @@ jobs:
             cp "$MEDIAMPV" "$NATIVE_DIR/libmediampv.so" && echo "libmediampv.so -> $NATIVE_DIR"
 
             # Bundle the FFmpeg/libmpv libs that libmediampv.so links against
+            # Copy REAL files only (fully-versioned), then create proper symlinks
             BUNDLED_LIBS="mediamp/mediamp-mpv/libmpv/lib/linux/x86_64"
             if [ -d "$BUNDLED_LIBS" ]; then
-              for lib in libmpv.so.2 libavcodec.so.62 libavformat.so.62 libavutil.so.60 libswscale.so.9 libswresample.so.6 libavfilter.so.11 libplacebo.so.360; do
-                [ -f "$BUNDLED_LIBS/$lib" ] && cp "$BUNDLED_LIBS/$lib" "$NATIVE_DIR/" && echo "  $lib -> $NATIVE_DIR"
+              # Copy real (non-symlink) .so files
+              find "$BUNDLED_LIBS" -maxdepth 1 -name "*.so*" -not -type l -type f | while read -r lib; do
+                cp "$lib" "$NATIVE_DIR/" && echo "  $(basename $lib) -> $NATIVE_DIR"
               done
-              # Also copy unversioned symlinks
-              for lib in libmpv.so libavcodec.so libavformat.so libavutil.so libswscale.so libswresample.so libavfilter.so libplacebo.so; do
-                [ -f "$BUNDLED_LIBS/$lib" ] && cp -P "$BUNDLED_LIBS/$lib" "$NATIVE_DIR/" || true
+
+              # Create proper soname symlinks in native dir
+              cd "$NATIVE_DIR"
+              for real in libavcodec.so.62.36.101 libavformat.so.62.19.101 libavutil.so.60.32.100 \
+                          libswscale.so.9.8.100 libswresample.so.6.4.100 libavfilter.so.11.17.100; do
+                if [ -f "$real" ]; then
+                  base="${real%.*.*}"        # e.g. libavcodec.so.62
+                  short="${base%.*}"         # e.g. libavcodec.so  (strip minor)
+                  # But short for libavcodec.so.62 -> strip .62 -> libavcodec.so
+                  short=$(echo "$real" | sed 's/\(lib[^.]*\.so\).*/\1/')
+                  ln -sf "$real" "$base" && echo "  symlink $base -> $real"
+                  ln -sf "$real" "$short" && echo "  symlink $short -> $real"
+                fi
               done
+              # libmpv: real file is libmpv.so.2.5.0
+              if [ -f "libmpv.so.2.5.0" ]; then
+                ln -sf libmpv.so.2.5.0 libmpv.so.2
+                ln -sf libmpv.so.2.5.0 libmpv.so
+                echo "  symlink libmpv.so.2 -> libmpv.so.2.5.0"
+                echo "  symlink libmpv.so -> libmpv.so.2.5.0"
+              fi
+              # libplacebo: real file is libplacebo.so.360
+              if [ -f "libplacebo.so.360" ]; then
+                ln -sf libplacebo.so.360 libplacebo.so
+                echo "  symlink libplacebo.so -> libplacebo.so.360"
+              fi
+              cd -
             fi
           fi
 
