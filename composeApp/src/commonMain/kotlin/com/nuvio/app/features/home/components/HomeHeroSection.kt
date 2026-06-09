@@ -2,6 +2,10 @@ package com.nuvio.app.features.home.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -90,11 +94,22 @@ fun HomeHeroSection(
     mobileBelowSectionHeightHint: Dp? = null,
     listState: LazyListState? = null,
     onItemClick: ((MetaPreview) -> Unit)? = null,
+    onPlayClick: ((MetaPreview) -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
 
     val pagerState = rememberPagerState(pageCount = { items.size })
     val coroutineScope = rememberCoroutineScope()
+
+    // Auto-rotate hero carousel every 8 seconds
+    LaunchedEffect(pagerState, items.size) {
+        if (items.size <= 1) return@LaunchedEffect
+        while (true) {
+            delay(8000)
+            val next = (pagerState.currentPage + 1) % items.size
+            pagerState.animateScrollToPage(next)
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -247,28 +262,56 @@ fun HomeHeroSection(
                                     item = items[layer.page],
                                     layout = layout,
                                     onItemClick = onItemClick,
+                                    onPlayClick = onPlayClick,
                                 )
                             }
                         }
                     }
 
-                    if (!layout.isTablet) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            modifier = Modifier
-                                .clickable(enabled = onItemClick != null) {
-                                    onItemClick?.invoke(currentItem)
-                                },
-                            color = MaterialTheme.colorScheme.onBackground,
-                            contentColor = MaterialTheme.colorScheme.background,
-                            shape = RoundedCornerShape(40.dp),
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.home_view_details),
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (onPlayClick != null) {
+                            Surface(
+                                modifier = Modifier.clickable { onPlayClick.invoke(currentItem) },
+                                color = MaterialTheme.colorScheme.onBackground,
+                                contentColor = MaterialTheme.colorScheme.background,
+                                shape = RoundedCornerShape(40.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(Res.string.action_play),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                        if (onItemClick != null) {
+                            Surface(
+                                modifier = Modifier.clickable { onItemClick.invoke(currentItem) },
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                shape = RoundedCornerShape(40.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.home_view_details),
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                         }
                     }
 
@@ -352,6 +395,7 @@ private fun HeroContentBlock(
     item: MetaPreview,
     layout: HomeHeroLayout,
     onItemClick: ((MetaPreview) -> Unit)?,
+    onPlayClick: ((MetaPreview) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -411,6 +455,18 @@ private fun HeroContentBlock(
                 HeroMetaDot()
                 HeroMetaText(text = formatReleaseDateForDisplay(info))
             }
+        }
+
+        // Show description on desktop/tablet
+        if (layout.isTablet && !item.description.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = item.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

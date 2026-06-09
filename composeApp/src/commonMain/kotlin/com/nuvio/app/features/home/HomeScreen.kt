@@ -607,6 +607,7 @@ fun HomeScreen(
                             mobileBelowSectionHeightHint = mobileHeroBelowSectionHeightHint,
                             listState = homeListState,
                             onItemClick = onPosterClick,
+                            onPlayClick = onPosterClick,
                         )
 
                         else -> HomeHeroReservedSpace(
