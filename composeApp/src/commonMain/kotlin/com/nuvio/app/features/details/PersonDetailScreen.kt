@@ -145,11 +145,15 @@ fun PersonDetailScreen(
 
         // Back button overlaid on top
         IconButton(
-            onClick = onBack,
+            onClick = {
+                println("PersonDetail: back button clicked")
+                onBack()
+            },
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 4.dp, top = 4.dp)
-                .align(Alignment.TopStart),
+                .align(Alignment.TopStart)
+                .zIndex(10f),
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,

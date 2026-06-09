@@ -1359,14 +1359,10 @@ private fun MainAppContent(
                     val directorRole = stringResource(Res.string.person_role_director)
                     val writerRole = stringResource(Res.string.person_role_writer)
                     val creatorRole = stringResource(Res.string.person_role_creator)
-                    val onBack = rememberGuardedPopBackStack(
-                        navController = navController,
-                        backStackEntry = backStackEntry,
-                    )
                     MetaDetailsScreen(
                         type = route.type,
                         id = route.id,
-                        onBack = onBack,
+                        onBack = { navController.popBackStack() },
                         onPlay = onPlay,
                         onPlayManually = onPlayManually,
                         onOpenMeta = { preview ->
@@ -1431,14 +1427,13 @@ private fun MainAppContent(
                 }
                 composable<PersonDetailRoute> { backStackEntry ->
                     val route = backStackEntry.toRoute<PersonDetailRoute>()
-                    val onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry)
                     PersonDetailScreen(
                         personId = route.personId,
                         personName = route.personName,
                         initialProfilePhoto = route.personPhoto,
                         avatarTransitionKey = route.castAvatarTransitionKey,
                         preferCrew = route.preferCrew,
-                        onBack = onBack,
+                        onBack = { navController.popBackStack() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1467,13 +1462,12 @@ private fun MainAppContent(
                 }
                 composable<EntityBrowseRoute> { backStackEntry ->
                     val route = backStackEntry.toRoute<EntityBrowseRoute>()
-                    val onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry)
                     TmdbEntityBrowseScreen(
                         entityKind = TmdbEntityKind.fromRouteValue(route.entityKind),
                         entityId = route.entityId,
                         entityName = route.entityName,
                         sourceType = route.sourceType,
-                        onBack = onBack,
+                        onBack = { navController.popBackStack() },
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1906,7 +1900,10 @@ private fun MainAppContent(
                                     forceInternal = !openExternally,
                                 )
                             },
-                            onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { StreamsRepository.clear() }),
+                            onBack = {
+                                StreamsRepository.clear()
+                                navController.popBackStack()
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                         if (resolvingDebridStream) {
@@ -1982,14 +1979,11 @@ private fun MainAppContent(
                         parentMetaType = launch.parentMetaType,
                         initialPositionMs = launch.initialPositionMs,
                         initialProgressFraction = launch.initialProgressFraction,
-                        onBack = rememberGuardedPopBackStack(
-                            navController = navController,
-                            backStackEntry = backStackEntry,
-                            beforePop = {
-                                ResumePromptRepository.markPlayerExitedNormally()
-                                PlayerLaunchStore.remove(route.launchId)
-                            },
-                        ),
+                        onBack = {
+                            ResumePromptRepository.markPlayerExitedNormally()
+                            PlayerLaunchStore.remove(route.launchId)
+                            navController.popBackStack()
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -2003,7 +1997,10 @@ private fun MainAppContent(
                         catalogId = route.catalogId,
                         supportsPagination = route.supportsPagination,
                         genre = route.genre,
-                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { CatalogRepository.clear() }),
+                        onBack = {
+                            CatalogRepository.clear()
+                            navController.popBackStack()
+                        },
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
                         },
@@ -2158,7 +2155,10 @@ private fun MainAppContent(
                     val route = backStackEntry.toRoute<CollectionEditorRoute>()
                     CollectionEditorScreen(
                         collectionId = route.collectionId,
-                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { CollectionEditorRepository.clear() }),
+                        onBack = {
+                            CollectionEditorRepository.clear()
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composable<FolderDetailRoute> { backStackEntry ->
@@ -2167,7 +2167,10 @@ private fun MainAppContent(
                         FolderDetailRepository.initialize(route.collectionId, route.folderId)
                     }
                     FolderDetailScreen(
-                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { FolderDetailRepository.clear() }),
+                        onBack = {
+                            FolderDetailRepository.clear()
+                            navController.popBackStack()
+                        },
                         onCatalogClick = onCatalogClick,
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
