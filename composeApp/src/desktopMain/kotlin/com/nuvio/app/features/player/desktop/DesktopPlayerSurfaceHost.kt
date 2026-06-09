@@ -123,29 +123,21 @@ internal fun DesktopPlayerSurfaceHost(
         backend.setResizeMode(resizeMode)
     }
 
-    val useNuvioOverlay = remember {
-        runCatching { PlayerSettingsRepository.getPlayerBackend() == PlayerBackendOption.NUVIO_PLAYER }
-            .getOrDefault(false)
-    }
-
-    if (useNuvioOverlay) {
-        val state by backend.state.collectAsState()
-        NuvioDesktopPlayerOverlay(
-            state = state,
-            controller = backend.controller,
-            videoSurface = { backend.Surface(modifier) },
-            onSubtitleClick = onSubtitleClick,
-            onAudioClick = onAudioClick,
-            onVideoSettingsClick = onVideoSettingsClick,
-            onSourcesClick = onSourcesClick,
-            onEpisodesClick = onEpisodesClick,
-            onBack = onBack,
-            onResizeModeClick = onResizeModeClick,
-            onSpeedClick = onSpeedClick,
-        )
-    } else {
-        backend.Surface(modifier)
-    }
+    // Always use the Nuvio overlay on desktop — it provides controls, back button, and OSD
+    val state by backend.state.collectAsState()
+    NuvioDesktopPlayerOverlay(
+        state = state,
+        controller = backend.controller,
+        videoSurface = { backend.Surface(modifier) },
+        onSubtitleClick = onSubtitleClick,
+        onAudioClick = onAudioClick,
+        onVideoSettingsClick = onVideoSettingsClick,
+        onSourcesClick = onSourcesClick,
+        onEpisodesClick = onEpisodesClick,
+        onBack = onBack,
+        onResizeModeClick = onResizeModeClick,
+        onSpeedClick = onSpeedClick,
+    )
 }
 
 private fun String.sha256Prefix(): String {

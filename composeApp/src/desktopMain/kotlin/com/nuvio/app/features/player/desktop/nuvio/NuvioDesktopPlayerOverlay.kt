@@ -98,8 +98,14 @@ internal fun NuvioDesktopPlayerOverlay(
             .onPointerEvent(PointerEventType.Move) { onActivity() }
             .onPointerEvent(PointerEventType.Scroll) { onActivity() }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyUp) handleKeyboardShortcut(event, controller, state)
-                else false
+                if (event.type == KeyEventType.KeyUp) {
+                    if (event.key == Key.Escape) {
+                        onBack?.invoke()
+                        true
+                    } else {
+                        handleKeyboardShortcut(event, controller, state)
+                    }
+                } else false
             },
     ) {
         videoSurface()
