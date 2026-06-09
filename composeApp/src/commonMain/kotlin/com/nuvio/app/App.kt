@@ -2402,12 +2402,11 @@ private fun rememberGuardedPopBackStack(
     backStackEntry: NavBackStackEntry,
     beforePop: () -> Unit = {},
 ): () -> Unit {
-    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    var popHandled by remember(backStackEntry) { mutableStateOf(false) }
+    var popHandled by remember(backStackEntry.id) { mutableStateOf(false) }
 
-    return remember(navController, backStackEntry, currentBackStackEntry, popHandled, beforePop) {
+    return remember(navController, backStackEntry.id, beforePop) {
         {
-            if (!popHandled && currentBackStackEntry == backStackEntry) {
+            if (!popHandled) {
                 popHandled = true
                 beforePop()
                 navController.popBackStack()
