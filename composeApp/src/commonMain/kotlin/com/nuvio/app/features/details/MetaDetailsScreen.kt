@@ -803,14 +803,12 @@ fun MetaDetailsScreen(
                             )
                         }
 
-                        // Always render the back button — hide it visually when
-                        // the floating header is fully visible (it has its own)
                         NuvioBackButton(
                             onClick = onBack,
                             modifier = Modifier.padding(
                                 start = 12.dp,
                                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                            ).zIndex(3f),
+                            ).zIndex(10f),
                             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
                             contentColor = MaterialTheme.colorScheme.onBackground,
                         )
@@ -821,7 +819,7 @@ fun MetaDetailsScreen(
                             progress = headerProgress,
                             onBack = onBack,
                             onToggleSaved = toggleSaved,
-                            modifier = Modifier.zIndex(2f),
+                            modifier = Modifier.zIndex(9f),
                         )
 
                         selectedEpisodeForActions?.let { selectedEpisode ->

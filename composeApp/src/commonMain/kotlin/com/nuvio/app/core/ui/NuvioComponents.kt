@@ -253,20 +253,26 @@ fun NuvioBackButton(
     iconSize: Dp = 24.dp,
     contentDescription: String = stringResource(Res.string.action_back),
 ) {
-    Box(
-        modifier = modifier
-            .size(buttonSize)
-            .clip(shape)
-            .background(containerColor)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+    // Use IconButton for proper Material touch handling — ensures click
+    // events are consumed correctly even when overlaid on scrollable content
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(buttonSize.coerceAtLeast(48.dp)),
     ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = contentDescription,
-            tint = contentColor,
-            modifier = Modifier.size(iconSize),
-        )
+        Box(
+            modifier = Modifier
+                .size(buttonSize)
+                .clip(shape)
+                .background(containerColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = contentDescription,
+                tint = contentColor,
+                modifier = Modifier.size(iconSize),
+            )
+        }
     }
 }
 
