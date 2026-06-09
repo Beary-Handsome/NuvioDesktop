@@ -94,8 +94,7 @@ fun DetailFloatingHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = headerTopPadding, start = 16.dp, end = 16.dp)
-                    .height(56.dp)
-                    .graphicsLayer { alpha = progress },
+                    .height(56.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

@@ -535,7 +535,9 @@ fun PlayerScreen(
                 // can block the UI thread, preventing navigation
                 val controller = playerController
                 if (controller != null) {
-                    Thread { runCatching { controller.release() } }.start()
+                    Thread({ runCatching { controller.release() } }, "nuvio-player-release")
+                        .apply { isDaemon = true }
+                        .start()
                 }
                 onBack()
             }

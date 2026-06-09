@@ -249,8 +249,8 @@ fun NuvioBackButton(
     shape: Shape = CircleShape,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    buttonSize: Dp = 40.dp,
-    iconSize: Dp = 22.dp,
+    buttonSize: Dp = 44.dp,
+    iconSize: Dp = 24.dp,
     contentDescription: String = stringResource(Res.string.action_back),
 ) {
     Box(

@@ -5,10 +5,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
@@ -73,6 +77,8 @@ internal fun NuvioDesktopPlayerOverlay(
     var volume by remember { mutableStateOf(1f) }
     var isMuted by remember { mutableStateOf(false) }
     var hideJob by remember { mutableStateOf<Job?>(null) }
+    var isDraggingSeek by remember { mutableStateOf(false) }
+    var lastClickTime by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
         controller.currentVolume()?.let { v ->
@@ -107,13 +113,33 @@ internal fun NuvioDesktopPlayerOverlay(
             .focusable()
             .onPointerEvent(PointerEventType.Move) { onActivity() }
             .onPointerEvent(PointerEventType.Scroll) { onActivity() }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                // Double-click to toggle fullscreen
+                val now = System.currentTimeMillis()
+                if (now - lastClickTime in 50..350) {
+                    onFullscreenToggle?.invoke()
+                    lastClickTime = 0L
+                } else {
+                    // Single click: toggle play/pause
+                    if (isPlaying) controller.pause() else controller.play()
+                    lastClickTime = now
+                }
+                onActivity()
+            }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp) {
-                    if (event.key == Key.Escape) {
-                        onBack?.invoke()
-                        true
-                    } else {
-                        handleKeyboardShortcut(event, controller, state)
+                    when (event.key) {
+                        Key.Escape -> { onBack?.invoke(); true }
+                        Key.F -> { onFullscreenToggle?.invoke(); true }
+                        Key.M -> {
+                            isMuted = !isMuted
+                            controller.setVolume(if (isMuted) 0f else volume)
+                            true
+                        }
+                        else -> handleKeyboardShortcut(event, controller, state)
                     }
                 } else false
             },
@@ -133,6 +159,7 @@ internal fun NuvioDesktopPlayerOverlay(
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.fillMaxSize()) {
+                // Top gradient
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -144,7 +171,7 @@ internal fun NuvioDesktopPlayerOverlay(
                             ),
                         ),
                 )
-
+                // Bottom gradient
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -162,6 +189,7 @@ internal fun NuvioDesktopPlayerOverlay(
                         .fillMaxSize()
                         .padding(horizontal = 20.dp),
                 ) {
+                    // Top bar: back, title, settings, fullscreen
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -169,21 +197,11 @@ internal fun NuvioDesktopPlayerOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (onBack != null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.35f))
-                                    .clickable(onClick = onBack),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ArrowBack,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                            HoverIconButton(
+                                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                onClick = onBack,
+                            )
                             Spacer(Modifier.width(12.dp))
                         }
 
@@ -200,108 +218,64 @@ internal fun NuvioDesktopPlayerOverlay(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (onVideoSettingsClick != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.35f))
-                                        .clickable(onClick = onVideoSettingsClick),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Build,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
+                                HoverIconButton(
+                                    icon = Icons.Rounded.Tune,
+                                    contentDescription = "Video settings",
+                                    onClick = onVideoSettingsClick,
+                                )
                             }
-
                             if (onFullscreenToggle != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.35f))
-                                        .clickable(onClick = onFullscreenToggle),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Fullscreen,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
+                                HoverIconButton(
+                                    icon = Icons.Rounded.Fullscreen,
+                                    contentDescription = "Toggle fullscreen (F)",
+                                    onClick = onFullscreenToggle,
+                                )
                             }
                         }
                     }
 
                     Spacer(Modifier.weight(1f))
 
+                    // Center controls: seek back, play/pause, seek forward
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { controller.seekBy(-10_000) }
-                                .padding(14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Replay10,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(38.dp),
-                            )
-                        }
+                        HoverIconButton(
+                            icon = Icons.Rounded.Replay10,
+                            contentDescription = "Rewind 10 seconds",
+                            onClick = { controller.seekBy(-10_000) },
+                            size = 52.dp,
+                            iconSize = 38.dp,
+                        )
 
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable {
-                                    if (isPlaying) controller.pause() else controller.play()
-                                }
-                                .padding(18.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (isBuffering) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 3.dp,
-                                    modifier = Modifier.size(44.dp),
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(44.dp),
-                                )
-                            }
-                        }
+                        Spacer(Modifier.width(16.dp))
 
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { controller.seekBy(10_000) }
-                                .padding(14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Forward10,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(38.dp),
-                            )
-                        }
+                        // Play/Pause with scale feedback
+                        HoverIconButton(
+                            icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause (Space)" else "Play (Space)",
+                            onClick = { if (isPlaying) controller.pause() else controller.play() },
+                            size = 64.dp,
+                            iconSize = 44.dp,
+                            showSpinner = isBuffering,
+                        )
+
+                        Spacer(Modifier.width(16.dp))
+
+                        HoverIconButton(
+                            icon = Icons.Rounded.Forward10,
+                            contentDescription = "Forward 10 seconds",
+                            onClick = { controller.seekBy(10_000) },
+                            size = 52.dp,
+                            iconSize = 38.dp,
+                        )
                     }
 
                     Spacer(Modifier.weight(1f))
 
+                    // Bottom controls: seek bar + action buttons
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -311,17 +285,25 @@ internal fun NuvioDesktopPlayerOverlay(
                             inactiveTrackColor = Color.White.copy(alpha = 0.28f),
                         )
 
+                        // Seek slider with drag feedback
                         Slider(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(24.dp)
-                                .graphicsLayer(scaleY = 0.72f),
+                                .graphicsLayer(scaleY = if (isDraggingSeek) 1.2f else 0.72f),
                             value = state.positionMs.coerceIn(0L, durationMs).toFloat(),
-                            onValueChange = { controller.seekTo(it.toLong()) },
+                            onValueChange = {
+                                isDraggingSeek = true
+                                controller.seekTo(it.toLong())
+                            },
+                            onValueChangeFinished = {
+                                isDraggingSeek = false
+                            },
                             valueRange = 0f..durationMs.toFloat(),
                             colors = sliderColors,
                         )
 
+                        // Time pills
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -334,6 +316,7 @@ internal fun NuvioDesktopPlayerOverlay(
                             TimePill(text = formatPlaybackTime(durationMs))
                         }
 
+                        // Action pill bar
                         Surface(
                             color = Color.Black.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(24.dp),
@@ -361,49 +344,26 @@ internal fun NuvioDesktopPlayerOverlay(
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    ActionPillButton(
-                                        icon = Icons.Rounded.AspectRatio,
-                                        label = "Fit",
-                                        onClick = { if (onResizeModeClick != null) onResizeModeClick() },
-                                    )
-                                    ActionPillButton(
-                                        icon = Icons.Rounded.Speed,
+                                    ActionPillButton(icon = Icons.Rounded.AspectRatio, label = "Fit",
+                                        onClick = { onResizeModeClick?.invoke() })
+                                    ActionPillButton(icon = Icons.Rounded.Speed,
                                         label = formatPlaybackSpeedLabel(state.playbackSpeed),
-                                        onClick = { if (onSpeedClick != null) onSpeedClick() },
-                                    )
+                                        onClick = { onSpeedClick?.invoke() })
                                     ActionPillButton(
-                                        icon = Icons.Rounded.Description,
-                                        label = "Config",
-                                        onClick = { openMpvConfigFile() },
-                                    )
-                                    ActionPillButton(
-                                        icon = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                                        label = "Vol",
-                                        onClick = { showVolume = !showVolume },
-                                    )
-                                    ActionPillButton(
-                                        icon = Icons.Rounded.Subtitles,
-                                        label = "CC",
-                                        onClick = { if (onSubtitleClick != null) onSubtitleClick() },
-                                    )
-                                    ActionPillButton(
-                                        icon = Icons.Rounded.AudioFile,
-                                        label = "AUD",
-                                        onClick = { if (onAudioClick != null) onAudioClick() },
-                                    )
+                                        icon = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff
+                                               else Icons.AutoMirrored.Rounded.VolumeUp,
+                                        label = "Vol", onClick = { showVolume = !showVolume })
+                                    ActionPillButton(icon = Icons.Rounded.Subtitles, label = "Subs",
+                                        onClick = { onSubtitleClick?.invoke() })
+                                    ActionPillButton(icon = Icons.Rounded.AudioFile, label = "Audio",
+                                        onClick = { onAudioClick?.invoke() })
                                     if (onSourcesClick != null) {
-                                        ActionPillButton(
-                                            icon = Icons.Rounded.SwapHoriz,
-                                            label = "Src",
-                                            onClick = onSourcesClick,
-                                        )
+                                        ActionPillButton(icon = Icons.Rounded.SwapHoriz, label = "Sources",
+                                            onClick = onSourcesClick)
                                     }
                                     if (onEpisodesClick != null) {
-                                        ActionPillButton(
-                                            icon = Icons.Rounded.VideoLibrary,
-                                            label = "Ep",
-                                            onClick = onEpisodesClick,
-                                        )
+                                        ActionPillButton(icon = Icons.Rounded.VideoLibrary, label = "Episodes",
+                                            onClick = onEpisodesClick)
                                     }
                                 }
                             }
@@ -412,6 +372,51 @@ internal fun NuvioDesktopPlayerOverlay(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Icon button with hover highlight and optional tooltip */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun HoverIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    size: Dp = 36.dp,
+    iconSize: Dp = 20.dp,
+    showSpinner: Boolean = false,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                when {
+                    isHovered -> Color.White.copy(alpha = 0.25f)
+                    else -> Color.Black.copy(alpha = 0.35f)
+                }
+            )
+            .hoverable(interactionSource)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (showSpinner) {
+            CircularProgressIndicator(
+                color = Color.White,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(iconSize),
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(iconSize),
+            )
         }
     }
 }
@@ -434,15 +439,21 @@ private fun TimePill(text: String) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ActionPillButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(22.dp))
+            .background(if (isHovered) Color.White.copy(alpha = 0.15f) else Color.Transparent)
+            .hoverable(interactionSource)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -482,7 +493,7 @@ private fun VolumeSliderRow(
     ) {
         Icon(
             imageVector = if (isMuted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-            contentDescription = null,
+            contentDescription = if (isMuted) "Unmute (M)" else "Mute (M)",
             tint = Color.White,
             modifier = Modifier
                 .size(22.dp)
@@ -514,14 +525,16 @@ private fun VolumeSliderRow(
 @Composable
 private fun IdleOverlay() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Icon(
-            imageVector = Icons.Rounded.PlayArrow,
-            contentDescription = null,
-            tint = Color(0xFFE5383B),
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("Nuvio Player", color = Color(0xFF999999), fontSize = 18.sp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Rounded.PlayArrow,
+                contentDescription = "Play",
+                tint = Color(0xFFE5383B),
+                modifier = Modifier.size(48.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("Nuvio Player", color = Color(0xFF999999), fontSize = 18.sp)
+        }
     }
 }
 

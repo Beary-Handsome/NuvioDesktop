@@ -57,7 +57,7 @@ import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
 private fun continueWatchingProgressPercent(progressFraction: Float): Int =
-    (progressFraction * 100f).roundToInt().coerceIn(1, 99)
+    (progressFraction * 100f).roundToInt().coerceIn(0, 99)
 
 @Composable
 private fun localizedContinueWatchingMetaLine(item: ContinueWatchingItem): String =

@@ -101,14 +101,20 @@ fun HomeHeroSection(
     val pagerState = rememberPagerState(pageCount = { items.size })
     val coroutineScope = rememberCoroutineScope()
 
-    // Auto-rotate hero carousel every 8 seconds
+    // Auto-rotate hero carousel every 8 seconds, pausing when user interacts
     LaunchedEffect(pagerState, items.size) {
         if (items.size <= 1) return@LaunchedEffect
-        while (true) {
-            delay(8000)
-            val next = (pagerState.currentPage + 1) % items.size
-            pagerState.animateScrollToPage(next)
-        }
+        kotlinx.coroutines.flow.snapshotFlow { pagerState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling) {
+                    // Wait 8 seconds after user stops interacting, then advance
+                    delay(8000)
+                    if (!pagerState.isScrollInProgress && items.isNotEmpty()) {
+                        val next = (pagerState.currentPage + 1) % items.size
+                        runCatching { pagerState.animateScrollToPage(next) }
+                    }
+                }
+            }
     }
 
     BoxWithConstraints(

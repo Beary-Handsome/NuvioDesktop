@@ -151,9 +151,14 @@ fun main(args: Array<String>) {
         } else {
             WindowPlacement.Floating
         }
+        val initialPosition = savedWindow?.positionX?.let { x ->
+            savedWindow.positionY?.let { y ->
+                WindowPosition.Absolute(x.dp, y.dp)
+            }
+        } ?: WindowPosition.Aligned(Alignment.Center)
         val startupWindowState = rememberWindowState(
             size = initialSize,
-            position = WindowPosition.Aligned(Alignment.Center),
+            position = initialPosition,
             placement = initialPlacement,
         )
         Window(
@@ -161,7 +166,7 @@ fun main(args: Array<String>) {
                 if (DesktopBorderlessFullscreenController.isFullscreenActive) {
                     DesktopRuntimeLog.info("windowClose skipped window-state save while borderless fullscreen is active")
                 } else {
-                    DesktopWindowStateStore.save(startupWindowState.size, startupWindowState.placement)
+                    DesktopWindowStateStore.save(startupWindowState.size, startupWindowState.placement, startupWindowState.position)
                 }
                 val closeStartMs = System.currentTimeMillis()
                 DesktopRuntimeLog.info("windowClose requested pid=$pid")
