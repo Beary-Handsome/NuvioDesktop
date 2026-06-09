@@ -67,6 +67,84 @@ jobs:
 
           sudo ldconfig 2>/dev/null || true
 
+      - name: Build libmpv with audio support
+        run: |
+          set -e
+          BUNDLED=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/lib/linux/x86_64
+          SYSLIB=/usr/lib/x86_64-linux-gnu
+
+          # --- 1. Install FFmpeg 7.1 headers from source ---
+          git clone --depth 1 --branch n7.1 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg-src
+          cd /tmp/ffmpeg-src
+          # Configure just enough to generate headers (no compilation needed)
+          ./configure --prefix=/tmp/ffmpeg-install \
+            --disable-programs --disable-doc --disable-everything \
+            --disable-autodetect --disable-static --enable-shared
+          make install-headers
+          FFMPEG_INCDIR=/tmp/ffmpeg-install/include
+          echo "FFmpeg headers installed to $FFMPEG_INCDIR"
+          ls "$FFMPEG_INCDIR"
+          cd -
+
+          # --- 2. Generate pkg-config .pc files for bundled FFmpeg ---
+          PC_DIR=/tmp/ffmpeg-pc
+          mkdir -p "$PC_DIR"
+          for spec in libavcodec:62.36.101 libavformat:62.19.101 libavutil:60.32.100 libswscale:9.8.100 libswresample:6.4.100 libavfilter:11.17.100; do
+            name="${spec%%:*}"
+            ver="${spec##*:}"
+            shortname="${name#lib}"
+            printf 'prefix=/usr\nlibdir=%s\nincludedir=%s\n\nName: %s\nDescription: FFmpeg %s\nVersion: %s\nLibs: -L%s -l%s\nCflags: -I%s\n' \
+              "$SYSLIB" "$FFMPEG_INCDIR" "$name" "$shortname" "$ver" "$SYSLIB" "$shortname" "$FFMPEG_INCDIR" \
+              > "$PC_DIR/$name.pc"
+          done
+          # libplacebo (bundled, system headers from apt)
+          printf 'prefix=/usr\nlibdir=%s\nincludedir=/usr/include\n\nName: libplacebo\nDescription: libplacebo\nVersion: 7.349.0\nLibs: -L%s -lplacebo\nCflags: -I/usr/include\n' \
+            "$SYSLIB" "$SYSLIB" > "$PC_DIR/libplacebo.pc"
+          echo "Generated pkg-config files:"
+          ls "$PC_DIR"
+
+          # --- 3. Build mpv from source with audio ---
+          git clone --depth 1 --branch v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src
+          cd /tmp/mpv-src
+          export PKG_CONFIG_PATH="$PC_DIR:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+          meson setup build \
+            --prefix=/usr \
+            -Dlibmpv=true \
+            -Dcplayer=false \
+            -Dpulse=enabled \
+            -Dalsa=enabled \
+            -Dpipewire=enabled \
+            -Dgl=enabled \
+            -Degl=enabled \
+            -Dx11=enabled \
+            -Dvulkan=enabled \
+            -Dwayland=disabled \
+            -Dlua=disabled \
+            -Djavascript=disabled \
+            -Djpeg=disabled \
+            -Dlibarchive=disabled \
+            -Dlibbluray=disabled \
+            -Ddvdnav=disabled \
+            -Dcdda=disabled \
+            -Drubberband=disabled \
+            -Dsdl2=disabled \
+            -Dmanpage-build=disabled \
+            -Dhtml-build=disabled
+          ninja -C build -j$(nproc)
+
+          # --- 4. Replace bundled libmpv ---
+          BUILT=$(find build -name "libmpv.so*" -not -type l -type f | head -1)
+          echo "Built libmpv: $BUILT ($(stat -c%s "$BUILT") bytes)"
+          strings "$BUILT" | grep -i "ao_pulse\|ao_pipewire\|ao_alsa" | head -5
+          cp "$BUILT" "$BUNDLED/libmpv.so.2.5.0"
+          cp "$BUILT" "$BUNDLED/libmpv.so"
+          sudo cp "$BUILT" "$SYSLIB/libmpv.so.2.5.0"
+          sudo ln -sf libmpv.so.2.5.0 "$SYSLIB/libmpv.so.2"
+          sudo ln -sf libmpv.so.2.5.0 "$SYSLIB/libmpv.so"
+          sudo ldconfig
+          echo "Replaced bundled libmpv with audio-enabled build"
+          cd -
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -122,7 +200,7 @@ jobs:
           if [ -n "$APP_DIR" ]; then
             mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
             cp "$APP_DIR/lib/app/Nuvio.cfg" "$APP_DIR/lib/app/Nuvio.real.cfg"
-            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nNATIVE="$DIR/../lib/app/native"\nexport LD_LIBRARY_PATH="$NATIVE:/usr/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
+            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
           fi
@@ -186,12 +264,6 @@ jobs:
               fi
               cd -
             fi
-          fi
-
-          # Remove bundled libmpv (has no audio drivers) — use system libmpv instead
-          if [ -n "$APP_DIR" ]; then
-            rm -f "$APP_DIR/lib/app/native/libmpv.so"* 2>/dev/null
-            echo "Removed bundled libmpv — will use system libmpv (with audio)"
           fi
 
           echo "=== Final native files ==="
