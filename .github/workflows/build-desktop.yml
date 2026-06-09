@@ -109,6 +109,7 @@ jobs:
           export PKG_CONFIG_PATH="$PC_DIR:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
           meson setup build \
             --prefix=/usr \
+            -Dc_link_args="-Wl,-rpath,\$ORIGIN" \
             -Dlibmpv=true \
             -Dcplayer=false \
             -Dpulse=enabled \
