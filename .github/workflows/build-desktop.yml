@@ -70,13 +70,33 @@ jobs:
       - name: Build libmpv from source with audio support
         run: |
           BUNDLED=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/lib/linux/x86_64
+          SYSLIB=/usr/lib/x86_64-linux-gnu
+          INCDIR=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/include
+
+          # Generate pkg-config .pc files for bundled FFmpeg so meson can find them
+          PC_DIR=/tmp/ffmpeg-pc
+          mkdir -p "$PC_DIR"
+          for lib in libavcodec:62.36.101 libavformat:62.19.101 libavutil:60.32.100 libswscale:9.8.100 libswresample:6.4.100 libavfilter:11.17.100; do
+            name="${lib%%:*}"
+            ver="${lib##*:}"
+            shortname="${name#lib}"
+            printf "prefix=/usr\nlibdir=%s\nincludedir=%s\n\nName: %s\nDescription: %s\nVersion: %s\nLibs: -L%s -l%s\nCflags: -I%s\n" \
+              "$SYSLIB" "$INCDIR" "$shortname" "$shortname" "$ver" "$SYSLIB" "$shortname" "$INCDIR" \
+              > "$PC_DIR/$shortname.pc"
+          done
+          printf "prefix=/usr\nlibdir=%s\nincludedir=/usr/include\n\nName: libplacebo\nDescription: libplacebo\nVersion: 7.360.0\nLibs: -L%s -lplacebo\nCflags: -I/usr/include\n" \
+            "$SYSLIB" "$SYSLIB" > "$PC_DIR/libplacebo.pc"
+          echo "Generated .pc files:"
+          ls "$PC_DIR"
+          cat "$PC_DIR/avcodec.pc"
+
           # Clone mpv matching our bundled version (0.39.x / libmpv 2.5.0)
           git clone --depth 1 --branch v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src || \
           git clone --depth 1 https://github.com/mpv-player/mpv.git /tmp/mpv-src
           cd /tmp/mpv-src
 
-          # Point pkg-config at our bundled FFmpeg headers
-          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+          # Point pkg-config at our generated .pc files
+          export PKG_CONFIG_PATH="$PC_DIR:$PKG_CONFIG_PATH"
 
           # Configure mpv with audio outputs + libmpv, minimal features
           meson setup build \
