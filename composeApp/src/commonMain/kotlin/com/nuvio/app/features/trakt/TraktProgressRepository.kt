@@ -111,7 +111,11 @@ object TraktProgressRepository {
         val requestId = nextRefreshRequestId()
         val headers = TraktAuthRepository.authorizedHeaders()
         if (headers == null) {
-            _uiState.value = TraktProgressUiState()
+            // Don't wipe existing entries — auth may be temporarily unavailable
+            // (e.g., token refresh in progress). Keep stale data visible.
+            if (_uiState.value.entries.isEmpty()) {
+                _uiState.value = TraktProgressUiState()
+            }
             return
         }
 
