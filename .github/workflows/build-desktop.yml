@@ -67,86 +67,6 @@ jobs:
 
           sudo ldconfig 2>/dev/null || true
 
-      - name: Build libmpv from source with audio support
-        run: |
-          BUNDLED=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/lib/linux/x86_64
-          SYSLIB=/usr/lib/x86_64-linux-gnu
-          INCDIR=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/include
-
-          # Generate pkg-config .pc files for bundled FFmpeg so meson can find them
-          PC_DIR=/tmp/ffmpeg-pc
-          mkdir -p "$PC_DIR"
-          for lib in libavcodec:62.36.101 libavformat:62.19.101 libavutil:60.32.100 libswscale:9.8.100 libswresample:6.4.100 libavfilter:11.17.100; do
-            name="${lib%%:*}"
-            ver="${lib##*:}"
-            shortname="${name#lib}"
-            printf "prefix=/usr\nlibdir=%s\nincludedir=%s\n\nName: %s\nDescription: %s\nVersion: %s\nLibs: -L%s -l%s\nCflags: -I%s\n" \
-              "$SYSLIB" "$INCDIR" "$shortname" "$shortname" "$ver" "$SYSLIB" "$shortname" "$INCDIR" \
-              > "$PC_DIR/$shortname.pc"
-          done
-          printf "prefix=/usr\nlibdir=%s\nincludedir=/usr/include\n\nName: libplacebo\nDescription: libplacebo\nVersion: 7.360.0\nLibs: -L%s -lplacebo\nCflags: -I/usr/include\n" \
-            "$SYSLIB" "$SYSLIB" > "$PC_DIR/libplacebo.pc"
-          echo "Generated .pc files:"
-          ls "$PC_DIR"
-          cat "$PC_DIR/avcodec.pc"
-
-          # Clone mpv matching our bundled version (0.39.x / libmpv 2.5.0)
-          git clone --depth 1 --branch v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src || \
-          git clone --depth 1 https://github.com/mpv-player/mpv.git /tmp/mpv-src
-          cd /tmp/mpv-src
-
-          # Point pkg-config at our generated .pc files
-          export PKG_CONFIG_PATH="$PC_DIR:$PKG_CONFIG_PATH"
-
-          # Configure mpv with audio outputs + libmpv, minimal features
-          meson setup build \
-            --prefix=/usr \
-            -Dlibmpv=true \
-            -Dpulse=enabled \
-            -Dalsa=enabled \
-            -Dpipewire=enabled \
-            -Dgl=enabled \
-            -Degl=enabled \
-            -Dx11=enabled \
-            -Dvulkan=enabled \
-            -Dwayland=disabled \
-            -Dcplayer=false \
-            -Dlua=disabled \
-            -Djavascript=disabled \
-            -Djpeg=disabled \
-            -Dlibarchive=disabled \
-            -Dlibbluray=disabled \
-            -Ddvdnav=disabled \
-            -Dcdda=disabled \
-            -Drubberband=disabled \
-            -Dsdl2=disabled \
-            -Dmanpage-build=disabled \
-            -Dhtml-build=disabled \
-            2>&1 | tail -30
-
-          ninja -C build libmpv.so -j4 2>&1 | tail -10
-
-          # Replace bundled libmpv with our audio-enabled build
-          BUILT_LIBMPV=$(find build -name "libmpv.so*" -not -type l | head -1)
-          if [ -n "$BUILT_LIBMPV" ]; then
-            echo "Built libmpv: $BUILT_LIBMPV"
-            # Verify it has audio support
-            strings "$BUILT_LIBMPV" | grep -i "ao_pulse\|ao_pipewire\|ao_alsa" | head -5 || echo "WARNING: no audio drivers found"
-            # Copy to bundled dir (overwrite the audio-less one)
-            cp "$BUILT_LIBMPV" "$BUNDLED/libmpv.so.2.5.0"
-            cp "$BUILT_LIBMPV" "$BUNDLED/libmpv.so"
-            # Also update system copy
-            sudo cp "$BUILT_LIBMPV" /usr/lib/x86_64-linux-gnu/libmpv.so.2.5.0
-            sudo ln -sf libmpv.so.2.5.0 /usr/lib/x86_64-linux-gnu/libmpv.so.2
-            sudo ln -sf libmpv.so.2.5.0 /usr/lib/x86_64-linux-gnu/libmpv.so
-            sudo ldconfig
-            echo "Replaced bundled libmpv with audio-enabled build"
-          else
-            echo "ERROR: libmpv build failed, keeping bundled version"
-            ls -la build/ 2>/dev/null
-          fi
-          cd -
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -202,7 +122,7 @@ jobs:
           if [ -n "$APP_DIR" ]; then
             mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
             cp "$APP_DIR/lib/app/Nuvio.cfg" "$APP_DIR/lib/app/Nuvio.real.cfg"
-            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
+            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nNATIVE="$DIR/../lib/app/native"\nexport LD_LIBRARY_PATH="$NATIVE:/usr/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
           fi
@@ -268,8 +188,14 @@ jobs:
             fi
           fi
 
+          # Remove bundled libmpv (has no audio drivers) — use system libmpv instead
+          if [ -n "$APP_DIR" ]; then
+            rm -f "$APP_DIR/lib/app/native/libmpv.so"* 2>/dev/null
+            echo "Removed bundled libmpv — will use system libmpv (with audio)"
+          fi
+
           echo "=== Final native files ==="
-          find "$APP_DIR" \( -name "nuvio-player" -o -name "libmediampv*" -o -name "*.so" \) 2>/dev/null
+          find "$APP_DIR" \( -name "nuvio-player" -o -name "libmediampv*" -o -name "*.so*" \) 2>/dev/null
 
       - name: Upload UberJar
         uses: actions/upload-artifact@v4
