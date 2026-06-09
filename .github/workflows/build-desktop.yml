@@ -117,7 +117,7 @@ jobs:
             -Dgl=enabled \
             -Degl=enabled \
             -Dx11=enabled \
-            -Dvulkan=enabled \
+            -Dvulkan=disabled \
             -Dwayland=disabled \
             -Dlua=disabled \
             -Djavascript=disabled \
