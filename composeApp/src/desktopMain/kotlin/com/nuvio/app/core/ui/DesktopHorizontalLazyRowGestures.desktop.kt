@@ -16,6 +16,17 @@ import kotlin.math.abs
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 actual fun Modifier.desktopHorizontalLazyRowGestures(listState: LazyListState): Modifier =
     this
+        // Handle trackpad two-finger scroll and mouse wheel
+        .onPointerEvent(PointerEventType.Scroll) {
+            val scrollDelta = it.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
+            // Horizontal trackpad scroll uses x; vertical mouse wheel uses y as fallback
+            val delta = if (scrollDelta.x != 0f) scrollDelta.x else scrollDelta.y
+            if (delta != 0f) {
+                listState.dispatchRawDelta(delta * 50f)
+                it.changes.forEach { c -> c.consume() }
+            }
+        }
+        // Handle mouse click-drag
         .pointerInput(listState) {
             awaitEachGesture {
                 val down = awaitFirstDown(pass = PointerEventPass.Initial)

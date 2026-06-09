@@ -96,7 +96,7 @@ fun <T> NuvioShelfSection(
             state = rowState,
             modifier = Modifier
                 .fillMaxWidth()
-                .shelfRowMouseDragScroll(rowState),
+                .desktopHorizontalLazyRowGestures(rowState),
             contentPadding = rowContentPadding,
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),
         ) {

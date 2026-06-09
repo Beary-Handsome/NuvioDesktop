@@ -1431,13 +1431,14 @@ private fun MainAppContent(
                 }
                 composable<PersonDetailRoute> { backStackEntry ->
                     val route = backStackEntry.toRoute<PersonDetailRoute>()
+                    val onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry)
                     PersonDetailScreen(
                         personId = route.personId,
                         personName = route.personName,
                         initialProfilePhoto = route.personPhoto,
                         avatarTransitionKey = route.castAvatarTransitionKey,
                         preferCrew = route.preferCrew,
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1466,12 +1467,13 @@ private fun MainAppContent(
                 }
                 composable<EntityBrowseRoute> { backStackEntry ->
                     val route = backStackEntry.toRoute<EntityBrowseRoute>()
+                    val onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry)
                     TmdbEntityBrowseScreen(
                         entityKind = TmdbEntityKind.fromRouteValue(route.entityKind),
                         entityId = route.entityId,
                         entityName = route.entityName,
                         sourceType = route.sourceType,
-                        onBack = { navController.popBackStack() },
+                        onBack = onBack,
                         onOpenMeta = { preview ->
                             coroutineScope.launch {
                                 val resolvedId = if (preview.id.startsWith("tmdb:")) {
@@ -1904,10 +1906,7 @@ private fun MainAppContent(
                                     forceInternal = !openExternally,
                                 )
                             },
-                            onBack = {
-                                StreamsRepository.clear()
-                                navController.popBackStack()
-                            },
+                            onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { StreamsRepository.clear() }),
                             modifier = Modifier.fillMaxSize(),
                         )
                         if (resolvingDebridStream) {
@@ -1983,11 +1982,14 @@ private fun MainAppContent(
                         parentMetaType = launch.parentMetaType,
                         initialPositionMs = launch.initialPositionMs,
                         initialProgressFraction = launch.initialProgressFraction,
-                        onBack = {
-                            ResumePromptRepository.markPlayerExitedNormally()
-                            PlayerLaunchStore.remove(route.launchId)
-                            navController.popBackStack()
-                        },
+                        onBack = rememberGuardedPopBackStack(
+                            navController = navController,
+                            backStackEntry = backStackEntry,
+                            beforePop = {
+                                ResumePromptRepository.markPlayerExitedNormally()
+                                PlayerLaunchStore.remove(route.launchId)
+                            },
+                        ),
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -2001,10 +2003,7 @@ private fun MainAppContent(
                         catalogId = route.catalogId,
                         supportsPagination = route.supportsPagination,
                         genre = route.genre,
-                        onBack = {
-                            CatalogRepository.clear()
-                            navController.popBackStack()
-                        },
+                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { CatalogRepository.clear() }),
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
                         },
@@ -2159,10 +2158,7 @@ private fun MainAppContent(
                     val route = backStackEntry.toRoute<CollectionEditorRoute>()
                     CollectionEditorScreen(
                         collectionId = route.collectionId,
-                        onBack = {
-                            CollectionEditorRepository.clear()
-                            navController.popBackStack()
-                        },
+                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { CollectionEditorRepository.clear() }),
                     )
                 }
                 composable<FolderDetailRoute> { backStackEntry ->
@@ -2171,10 +2167,7 @@ private fun MainAppContent(
                         FolderDetailRepository.initialize(route.collectionId, route.folderId)
                     }
                     FolderDetailScreen(
-                        onBack = {
-                            FolderDetailRepository.clear()
-                            navController.popBackStack()
-                        },
+                        onBack = rememberGuardedPopBackStack(navController = navController, backStackEntry = backStackEntry, beforePop = { FolderDetailRepository.clear() }),
                         onCatalogClick = onCatalogClick,
                         onPosterClick = { meta ->
                             navController.navigate(DetailRoute(type = meta.type, id = meta.id))
