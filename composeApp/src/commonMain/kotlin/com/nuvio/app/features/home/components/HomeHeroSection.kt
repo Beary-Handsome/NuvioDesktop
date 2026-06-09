@@ -32,10 +32,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -104,7 +106,7 @@ fun HomeHeroSection(
     // Auto-rotate hero carousel every 8 seconds, pausing when user interacts
     LaunchedEffect(pagerState, items.size) {
         if (items.size <= 1) return@LaunchedEffect
-        kotlinx.coroutines.flow.snapshotFlow { pagerState.isScrollInProgress }
+        snapshotFlow { pagerState.isScrollInProgress }
             .collect { scrolling ->
                 if (!scrolling) {
                     // Wait 8 seconds after user stops interacting, then advance
