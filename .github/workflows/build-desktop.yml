@@ -36,7 +36,7 @@ jobs:
             libpulse-dev libasound2-dev libpipewire-0.3-dev \
             libass-dev libplacebo-dev libegl-dev libgl-dev libx11-dev \
             libxrandr-dev libxss-dev libxext-dev libxpresent-dev \
-            libvulkan-dev meson python3-jinja2
+            libvulkan-dev meson python3-jinja2 nasm
           # Remove system FFmpeg/libmpv-dev to force cmake to use bundled versions
           sudo apt-get remove -y libmpv-dev libmpv2 libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libavfilter-dev libswresample-dev 2>/dev/null || true
 
