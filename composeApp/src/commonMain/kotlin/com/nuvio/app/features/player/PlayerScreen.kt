@@ -221,7 +221,15 @@ fun PlayerScreen(
         var controlsVisible by rememberSaveable { mutableStateOf(true) }
         var useNuvioOverlay by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
-            useNuvioOverlay = runCatching { PlayerSettingsRepository.getPlayerBackend() == PlayerBackendOption.NUVIO_PLAYER }.getOrDefault(false)
+            // On desktop, always use the Nuvio overlay (it provides back button, controls, OSD)
+            val isDesktop = runCatching {
+                System.getProperty("os.name")?.lowercase()?.let {
+                    it.contains("nux") || it.contains("win") || it.contains("mac")
+                } ?: false
+            }.getOrDefault(false)
+            useNuvioOverlay = isDesktop || runCatching {
+                PlayerSettingsRepository.getPlayerBackend() == PlayerBackendOption.NUVIO_PLAYER
+            }.getOrDefault(false)
         }
         var playerControlsLocked by rememberSaveable { mutableStateOf(false) }
         var isHovering by remember { mutableStateOf(false) }
@@ -523,7 +531,12 @@ fun PlayerScreen(
         val onBackWithProgress = remember(onBack, playbackSession, playbackSnapshot) {
             {
                 flushWatchProgress()
-                playerController?.release()
+                // Release player on background thread — mpvHandle.command("stop")
+                // can block the UI thread, preventing navigation
+                val controller = playerController
+                if (controller != null) {
+                    Thread { runCatching { controller.release() } }.start()
+                }
                 onBack()
             }
         }
