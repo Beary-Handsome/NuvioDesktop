@@ -108,7 +108,7 @@ jobs:
           ls "$PC_DIR"
 
           # --- 3. Build mpv from source with audio ---
-          git clone --depth 1 --branch v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src
+          git clone --depth 1 --branch v0.41.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src
           cd /tmp/mpv-src
           export PKG_CONFIG_PATH="$PC_DIR:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
           meson setup build \
