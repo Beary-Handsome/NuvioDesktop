@@ -32,9 +32,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config clang \
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
-            librsvg2-dev libglib2.0-dev
+            librsvg2-dev libglib2.0-dev \
+            libpulse-dev libasound2-dev libpipewire-0.3-dev \
+            libass-dev libplacebo-dev libegl-dev libgl-dev libx11-dev \
+            libxrandr-dev libxss-dev libxext-dev libxpresent-dev \
+            libvulkan-dev meson python3-jinja2
           # Remove system FFmpeg/libmpv-dev to force cmake to use bundled versions
-          sudo apt-get remove -y libmpv-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libavfilter-dev libswresample-dev 2>/dev/null || true
+          sudo apt-get remove -y libmpv-dev libmpv2 libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libavfilter-dev libswresample-dev 2>/dev/null || true
 
       - name: Symlink bundled FFmpeg/libmpv for linker
         run: |
@@ -62,6 +66,66 @@ jobs:
           cd -
 
           sudo ldconfig 2>/dev/null || true
+
+      - name: Build libmpv from source with audio support
+        run: |
+          BUNDLED=${{ github.workspace }}/mediamp/mediamp-mpv/libmpv/lib/linux/x86_64
+          # Clone mpv matching our bundled version (0.39.x / libmpv 2.5.0)
+          git clone --depth 1 --branch v0.39.0 https://github.com/mpv-player/mpv.git /tmp/mpv-src || \
+          git clone --depth 1 https://github.com/mpv-player/mpv.git /tmp/mpv-src
+          cd /tmp/mpv-src
+
+          # Point pkg-config at our bundled FFmpeg headers
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
+
+          # Configure mpv with audio outputs + libmpv, minimal features
+          meson setup build \
+            --prefix=/usr \
+            -Dlibmpv=true \
+            -Dpulse=enabled \
+            -Dalsa=enabled \
+            -Dpipewire=enabled \
+            -Dgl=enabled \
+            -Degl=enabled \
+            -Dx11=enabled \
+            -Dvulkan=enabled \
+            -Dwayland=disabled \
+            -Dcplayer=false \
+            -Dlua=disabled \
+            -Djavascript=disabled \
+            -Djpeg=disabled \
+            -Dlibarchive=disabled \
+            -Dlibbluray=disabled \
+            -Ddvdnav=disabled \
+            -Dcdda=disabled \
+            -Drubberband=disabled \
+            -Dsdl2=disabled \
+            -Dmanpage-build=disabled \
+            -Dhtml-build=disabled \
+            2>&1 | tail -30
+
+          ninja -C build libmpv.so -j4 2>&1 | tail -10
+
+          # Replace bundled libmpv with our audio-enabled build
+          BUILT_LIBMPV=$(find build -name "libmpv.so*" -not -type l | head -1)
+          if [ -n "$BUILT_LIBMPV" ]; then
+            echo "Built libmpv: $BUILT_LIBMPV"
+            # Verify it has audio support
+            strings "$BUILT_LIBMPV" | grep -i "ao_pulse\|ao_pipewire\|ao_alsa" | head -5 || echo "WARNING: no audio drivers found"
+            # Copy to bundled dir (overwrite the audio-less one)
+            cp "$BUILT_LIBMPV" "$BUNDLED/libmpv.so.2.5.0"
+            cp "$BUILT_LIBMPV" "$BUNDLED/libmpv.so"
+            # Also update system copy
+            sudo cp "$BUILT_LIBMPV" /usr/lib/x86_64-linux-gnu/libmpv.so.2.5.0
+            sudo ln -sf libmpv.so.2.5.0 /usr/lib/x86_64-linux-gnu/libmpv.so.2
+            sudo ln -sf libmpv.so.2.5.0 /usr/lib/x86_64-linux-gnu/libmpv.so
+            sudo ldconfig
+            echo "Replaced bundled libmpv with audio-enabled build"
+          else
+            echo "ERROR: libmpv build failed, keeping bundled version"
+            ls -la build/ 2>/dev/null
+          fi
+          cd -
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
