@@ -36,7 +36,8 @@ jobs:
             libpulse-dev libasound2-dev libpipewire-0.3-dev \
             libass-dev libplacebo-dev libegl-dev libgl-dev libx11-dev \
             libxrandr-dev libxss-dev libxext-dev libxpresent-dev \
-            libvulkan-dev meson python3-jinja2 nasm
+            libvulkan-dev meson python3-jinja2 nasm \
+            libshaderc-dev
           # Remove system FFmpeg/libmpv-dev to force cmake to use bundled versions
           sudo apt-get remove -y libmpv-dev libmpv2 libavcodec-dev libavformat-dev libswscale-dev libavutil-dev libavfilter-dev libswresample-dev 2>/dev/null || true
 
@@ -204,7 +205,7 @@ jobs:
           if [ -n "$APP_DIR" ]; then
             mv "$APP_DIR/bin/Nuvio" "$APP_DIR/bin/Nuvio.real"
             cp "$APP_DIR/lib/app/Nuvio.cfg" "$APP_DIR/lib/app/Nuvio.real.cfg"
-            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nNATIVE="$DIR/../lib/app/native"\n# Fedora names libshaderc differently\nif [ ! -e "$NATIVE/libshaderc.so.1" ]; then\n  for p in /usr/lib64/libshaderc_shared.so.1 /usr/lib/x86_64-linux-gnu/libshaderc_shared.so.1; do\n    [ -f "$p" ] && ln -sf "$p" "$NATIVE/libshaderc.so.1" && break\n  done\nfi\nexport LD_LIBRARY_PATH="$NATIVE"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
+            printf '#!/bin/bash\nexport GDK_BACKEND=x11\nexport _JAVA_AWT_WM_NONREPARENTING=1\nDIR="$(cd "$(dirname "$0")" && pwd)"\nAPPDIR="$DIR/../lib/app"\nNATIVE="$APPDIR/native"\nexport LD_LIBRARY_PATH="$NATIVE:$APPDIR"\nexec "$DIR/Nuvio.real" "$@"\n' > "$APP_DIR/bin/Nuvio"
             chmod +x "$APP_DIR/bin/Nuvio"
             echo "Created Nuvio launcher wrapper"
           fi
@@ -265,6 +266,18 @@ jobs:
               if [ -f "libplacebo.so.360" ]; then
                 ln -sf libplacebo.so.360 libplacebo.so
                 echo "  symlink libplacebo.so -> libplacebo.so.360"
+              fi
+              # libshaderc: bundle the .so.1 file for Fedora compat
+              # (Fedora names it libshaderc_shared.so.1, so we need to provide libshaderc.so.1)
+              SHADERC=$(find /usr/lib/x86_64-linux-gnu /usr/lib64 /usr/lib -maxdepth 1 \
+                -name "libshaderc*.so.1" -not -type l -type f 2>/dev/null | head -1)
+              if [ -n "$SHADERC" ]; then
+                cp "$SHADERC" libshaderc.so.1 && echo "  bundled libshaderc.so.1 from $SHADERC"
+              else
+                # Try the symlink target
+                SHADERC=$(find /usr/lib/x86_64-linux-gnu /usr/lib64 /usr/lib -maxdepth 1 \
+                  -name "libshaderc*.so*" -type f 2>/dev/null | head -1)
+                [ -n "$SHADERC" ] && cp "$SHADERC" libshaderc.so.1 && echo "  bundled libshaderc.so.1 from $SHADERC (fallback)"
               fi
               cd -
             fi
