@@ -60,10 +60,12 @@ internal object DesktopPreferences {
         temp.writeText(value, StandardCharsets.UTF_8)
         try {
             Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: Exception) {
+        } catch (e1: Exception) {
+            System.err.println("DesktopPreferences: atomic move failed ns=$namespace key=$key: ${e1.message}")
             try {
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
-            } catch (_: Exception) {
+            } catch (e2: Exception) {
+                System.err.println("DesktopPreferences: fallback move failed ns=$namespace key=$key: ${e2.message}")
                 target.writeText(value, StandardCharsets.UTF_8)
                 runCatching { temp.deleteExisting() }
             }

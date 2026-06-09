@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -90,11 +93,18 @@ internal fun NuvioDesktopPlayerOverlay(
     val isPlaying = state.phase == DesktopPlayerPhase.Playing
     val isBuffering = state.phase == DesktopPlayerPhase.Buffering
     val durationMs = state.durationMs.coerceAtLeast(1L)
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(focusRequester)
+            .focusable()
             .onPointerEvent(PointerEventType.Move) { onActivity() }
             .onPointerEvent(PointerEventType.Scroll) { onActivity() }
             .onPreviewKeyEvent { event ->

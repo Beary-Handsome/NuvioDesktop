@@ -167,6 +167,17 @@ internal class MpvDesktopPlayerBackend private constructor(
                 player.resume()
                 runCatching { mpvHandle.setPropertyBoolean("pause", false) }
                     .onFailure { DesktopRuntimeLog.error("MPV unpause after load failed", it) }
+                // Ensure unpause sticks after MPV finishes async file loading
+                scope.launch {
+                    delay(200)
+                    if (!stopped && !nativeClosed) {
+                        runCatching { mpvHandle.setPropertyBoolean("pause", false) }
+                    }
+                    delay(500)
+                    if (!stopped && !nativeClosed) {
+                        runCatching { mpvHandle.setPropertyBoolean("pause", false) }
+                    }
+                }
             } else {
                 player.pause()
             }

@@ -1359,12 +1359,14 @@ private fun MainAppContent(
                     val directorRole = stringResource(Res.string.person_role_director)
                     val writerRole = stringResource(Res.string.person_role_writer)
                     val creatorRole = stringResource(Res.string.person_role_creator)
+                    val onBack = rememberGuardedPopBackStack(
+                        navController = navController,
+                        backStackEntry = backStackEntry,
+                    )
                     MetaDetailsScreen(
                         type = route.type,
                         id = route.id,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = onBack,
                         onPlay = onPlay,
                         onPlayManually = onPlayManually,
                         onOpenMeta = { preview ->
