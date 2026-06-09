@@ -74,6 +74,8 @@ jobs:
           SYSLIB=/usr/lib/x86_64-linux-gnu
 
           # --- 1. Install FFmpeg 7.1 headers from source ---
+          # Remove ALL system FFmpeg headers to prevent version contamination
+          sudo rm -rf /usr/include/libav* /usr/include/libsw* /usr/include/libpostproc
           git clone --depth 1 --branch n7.1 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg-src
           cd /tmp/ffmpeg-src
           # Configure just enough to generate headers (no compilation needed)
@@ -84,6 +86,8 @@ jobs:
           FFMPEG_INCDIR=/tmp/ffmpeg-install/include
           echo "FFmpeg headers installed to $FFMPEG_INCDIR"
           ls "$FFMPEG_INCDIR"
+          # Verify version matches bundled libs
+          grep "#define LIBAVCODEC_VERSION_M" "$FFMPEG_INCDIR/libavcodec/version.h" || true
           cd -
 
           # --- 2. Generate pkg-config .pc files for bundled FFmpeg ---
