@@ -76,7 +76,7 @@ jobs:
           # --- 1. Install FFmpeg 7.1 headers from source ---
           # Remove ALL system FFmpeg headers to prevent version contamination
           sudo rm -rf /usr/include/libav* /usr/include/libsw* /usr/include/libpostproc
-          git clone --depth 1 --branch n7.1 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg-src
+          git clone --depth 1 --branch n8.0.2 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg-src
           cd /tmp/ffmpeg-src
           # Configure just enough to generate headers (no compilation needed)
           ./configure --prefix=/tmp/ffmpeg-install \
