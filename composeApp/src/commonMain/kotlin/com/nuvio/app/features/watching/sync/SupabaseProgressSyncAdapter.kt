@@ -31,7 +31,8 @@ object SupabaseProgressSyncAdapter : ProgressSyncAdapter {
                 put("p_limit", limit)
             }
         }
-        val result = SupabaseProvider.client.postgrest.rpc("sync_pull_watch_progress", params)
+        val supabase = SupabaseProvider.clientOrNull ?: return emptyList()
+        val result = supabase.postgrest.rpc("sync_pull_watch_progress", params)
         val serverEntries = result.decodeList<WatchProgressSyncEntry>()
         return serverEntries.map { entry ->
             ProgressSyncRecord(
@@ -87,7 +88,8 @@ object SupabaseProgressSyncAdapter : ProgressSyncAdapter {
             put("p_profile_id", profileId)
             put("p_keys", json.encodeToJsonElement(progressKeys))
         }
-        SupabaseProvider.client.postgrest.rpc("sync_delete_watch_progress", params)
+        val supabase = SupabaseProvider.clientOrNull ?: return
+        supabase.postgrest.rpc("sync_delete_watch_progress", params)
     }
 
     private fun progressKeyForEntry(entry: WatchProgressEntry): String =

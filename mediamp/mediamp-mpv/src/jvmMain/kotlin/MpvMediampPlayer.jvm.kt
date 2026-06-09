@@ -287,10 +287,16 @@ actual class MpvMediampPlayer(
             }
 
             PlaybackState.PLAYING -> {
-                handle.command("cycle", "pause")
+                // Already playing — explicitly unpause rather than toggle
+                handle.setPropertyBoolean("pause", false)
             }
 
-            else -> {} // TODO: unreachable
+            PlaybackState.PAUSED -> {
+                handle.setPropertyBoolean("pause", false)
+                playbackState.value = PlaybackState.PLAYING
+            }
+
+            else -> {}
         }
     }
 

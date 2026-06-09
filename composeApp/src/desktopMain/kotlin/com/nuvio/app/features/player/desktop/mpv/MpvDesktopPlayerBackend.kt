@@ -71,8 +71,8 @@ internal class MpvDesktopPlayerBackend private constructor(
     private val runtime: MpvRuntimeResolution,
     private val player: MpvMediampPlayer,
 ) : DesktopPlayerBackend {
-    override val id: String = "windows-mpv-${System.identityHashCode(player)}"
-    override val backendName: String = "windows-mediamp-mpv"
+    override val id: String = "desktop-mpv-${System.identityHashCode(player)}"
+    override val backendName: String = "desktop-mediamp-mpv"
     private val mpvHandle: MPVHandle get() = player.impl as MPVHandle
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
