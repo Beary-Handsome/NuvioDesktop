@@ -67,6 +67,11 @@ fun DetailFloatingHeader(
         mutableStateOf(false)
     }
 
+    if (progress <= 0.01f) {
+        // When fully hidden, don't render at all — prevents intercepting clicks
+        // meant for the NuvioBackButton underneath
+        return
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
