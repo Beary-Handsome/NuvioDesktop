@@ -132,7 +132,6 @@ jobs:
             -Ddvdnav=disabled \
             -Dcdda=disabled \
             -Drubberband=disabled \
-            -Dsdl2=disabled \
             -Dmanpage-build=disabled \
             -Dhtml-build=disabled
           ninja -C build -j$(nproc)
