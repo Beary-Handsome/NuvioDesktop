@@ -121,10 +121,7 @@ fun TmdbEntityBrowseScreen(
         }
 
         IconButton(
-            onClick = {
-                println("EntityBrowse: back button clicked")
-                onBack()
-            },
+            onClick = onBack,
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 4.dp, top = 4.dp)

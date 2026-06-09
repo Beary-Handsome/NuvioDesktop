@@ -73,15 +73,9 @@ object DebridSettingsRepository {
 
     fun setProviderApiKey(providerId: String, value: String) {
         ensureLoaded()
-        val provider = DebridProviders.byId(providerId) ?: run {
-            println("DebridSettings: unknown provider=$providerId")
-            return
-        }
+        val provider = DebridProviders.byId(providerId) ?: return
         val normalized = value.trim()
-        if (providerApiKeys[provider.id].orEmpty() == normalized) {
-            println("DebridSettings: key unchanged for ${provider.id}")
-            return
-        }
+        if (providerApiKeys[provider.id].orEmpty() == normalized) return
         providerApiKeys = if (normalized.isBlank()) {
             providerApiKeys - provider.id
         } else {
@@ -91,7 +85,6 @@ object DebridSettingsRepository {
         disableIfNoResolver()
         publish()
         DebridSettingsStorage.saveProviderApiKey(provider.id, normalized)
-        println("DebridSettings: saved key for ${provider.id} (${normalized.length} chars)")
     }
 
     fun setTorboxApiKey(value: String) {

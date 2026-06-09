@@ -146,10 +146,7 @@ fun PersonDetailScreen(
 
         // Back button overlaid on top
         IconButton(
-            onClick = {
-                println("PersonDetail: back button clicked")
-                onBack()
-            },
+            onClick = onBack,
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 4.dp, top = 4.dp)

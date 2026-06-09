@@ -803,17 +803,17 @@ fun MetaDetailsScreen(
                             )
                         }
 
-                        if (headerProgress <= 0.15f) {
-                            NuvioBackButton(
-                                onClick = onBack,
-                                modifier = Modifier.padding(
-                                    start = 12.dp,
-                                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                                ).zIndex(3f),
-                                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                contentColor = MaterialTheme.colorScheme.onBackground,
-                            )
-                        }
+                        // Always render the back button — hide it visually when
+                        // the floating header is fully visible (it has its own)
+                        NuvioBackButton(
+                            onClick = onBack,
+                            modifier = Modifier.padding(
+                                start = 12.dp,
+                                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
+                            ).zIndex(3f),
+                            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.onBackground,
+                        )
 
                         DetailFloatingHeader(
                             meta = meta,
