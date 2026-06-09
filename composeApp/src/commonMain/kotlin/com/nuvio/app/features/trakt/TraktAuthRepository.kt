@@ -110,6 +110,19 @@ object TraktAuthRepository {
         publish(errorMessage = reason)
     }
 
+    /** OOB PIN flow: user enters the PIN code shown by Trakt after approval */
+    fun onPinSubmitted(pin: String) {
+        val trimmed = pin.trim()
+        if (trimmed.isBlank()) return
+        scope.launch {
+            publish(isLoading = true, errorMessage = null)
+            exchangeAuthorizationCode(trimmed)
+        }
+    }
+
+    fun isOobRedirect(): Boolean =
+        TraktConfig.REDIRECT_URI.contains("urn:ietf:wg:oauth:2.0:oob", ignoreCase = true)
+
     fun onAuthCallbackReceived(callbackUrl: String) {
         ensureLoaded()
         if (!callbackUrl.startsWith("${TraktConfig.REDIRECT_URI}?", ignoreCase = true) &&

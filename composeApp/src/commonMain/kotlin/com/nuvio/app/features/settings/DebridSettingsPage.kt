@@ -196,6 +196,7 @@ internal fun LazyListScope.debridSettingsContent(
     item {
         var activeApiKeyProviderId by rememberSaveable { mutableStateOf<String?>(null) }
         var activeDeviceAuthProviderId by rememberSaveable { mutableStateOf<String?>(null) }
+        var activeBasicAuthProviderId by rememberSaveable { mutableStateOf<String?>(null) }
         val providers = remember { DebridProviders.visible() }
         val notSetLabel = stringResource(Res.string.settings_debrid_not_set)
         val connectedLabel = stringResource(Res.string.settings_debrid_connected)
@@ -228,7 +229,7 @@ internal fun LazyListScope.debridSettingsContent(
                             when (provider.authMethod) {
                                 DebridProviderAuthMethod.DeviceCode -> activeDeviceAuthProviderId = provider.id
                                 DebridProviderAuthMethod.ApiKey -> activeApiKeyProviderId = provider.id
-                                DebridProviderAuthMethod.BasicAuth -> activeApiKeyProviderId = provider.id
+                                DebridProviderAuthMethod.BasicAuth -> activeBasicAuthProviderId = provider.id
                             }
                         },
                     )
@@ -259,6 +260,18 @@ internal fun LazyListScope.debridSettingsContent(
                     currentValue = settings.apiKeyFor(provider.id),
                     onSave = { apiKey -> DebridSettingsRepository.setProviderApiKey(provider.id, apiKey) },
                     onDismiss = { activeApiKeyProviderId = null },
+                )
+            }
+
+        activeBasicAuthProviderId
+            ?.let(DebridProviders::byId)
+            ?.let { provider ->
+                DebridBasicAuthDialog(
+                    providerId = provider.id,
+                    title = provider.displayName,
+                    currentValue = settings.apiKeyFor(provider.id),
+                    onSave = { credential -> DebridSettingsRepository.setProviderApiKey(provider.id, credential) },
+                    onDismiss = { activeBasicAuthProviderId = null },
                 )
             }
     }
@@ -1691,4 +1704,85 @@ private fun DebridInfoRow(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun DebridBasicAuthDialog(
+    providerId: String,
+    title: String,
+    currentValue: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Credential stored as "username:password"
+    val parts = currentValue.split(":", limit = 2)
+    var username by rememberSaveable(currentValue) { mutableStateOf(parts.getOrElse(0) { "" }) }
+    var password by rememberSaveable(currentValue) { mutableStateOf(parts.getOrElse(1) { "" }) }
+    var isSaving by rememberSaveable(providerId) { mutableStateOf(false) }
+
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        DebridDialogSurface(title = title) {
+            Text(
+                text = "Enter your $title username and password",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Username") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Password") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(Res.string.action_cancel))
+                }
+                TextButton(
+                    onClick = {
+                        onSave("")
+                        onDismiss()
+                    },
+                    enabled = !isSaving,
+                ) {
+                    Text(stringResource(Res.string.action_clear))
+                }
+                Button(
+                    onClick = {
+                        val credential = "${username.trim()}:${password.trim()}"
+                        isSaving = true
+                        onSave(credential)
+                        isSaving = false
+                        onDismiss()
+                    },
+                    enabled = username.isNotBlank() && password.isNotBlank() && !isSaving,
+                ) {
+                    Text(stringResource(Res.string.action_save))
+                }
+            }
+        }
+    }
 }

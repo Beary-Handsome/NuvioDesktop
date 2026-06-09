@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -639,6 +640,30 @@ private fun TraktConnectionCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (TraktAuthRepository.isOobRedirect()) {
+                    var pinValue by rememberSaveable { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = pinValue,
+                        onValueChange = { pinValue = it.filter { c -> c.isLetterOrDigit() }.take(16) },
+                        label = { Text("Enter PIN from Trakt") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Button(
+                        onClick = { TraktAuthRepository.onPinSubmitted(pinValue) },
+                        enabled = pinValue.isNotBlank() && !uiState.isLoading,
+                    ) {
+                        if (uiState.isLoading) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        } else {
+                            Text("Submit PIN")
+                        }
+                    }
+                }
                 Button(
                     onClick = {
                         val authUrl = TraktAuthRepository.pendingAuthorizationUrl()

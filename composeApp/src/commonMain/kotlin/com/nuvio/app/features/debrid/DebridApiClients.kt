@@ -540,7 +540,10 @@ object DebridCredentialValidator {
     suspend fun validateProvider(providerId: String, apiKey: String): Boolean {
         val normalized = apiKey.trim()
         if (normalized.isBlank()) return false
-        return DebridProviderApis.apiFor(providerId)?.validateApiKey(normalized) == true
+        // If no API implementation exists for this provider (e.g. AllDebrid, EasyNews),
+        // accept the credential without server-side validation
+        val api = DebridProviderApis.apiFor(providerId) ?: return true
+        return api.validateApiKey(normalized)
     }
 }
 
