@@ -136,12 +136,8 @@ object TraktProgressRepository {
             return
         }
 
-        _uiState.value = TraktProgressUiState(
-            entries = playbackEntries,
-            isLoading = true,
-            errorMessage = null,
-            hasLoadedRemoteProgress = false,
-        )
+        // Don't publish partial state — wait until both playback AND history
+        // are fetched so the UI doesn't flash incomplete data
 
         if (playbackEntries.isNotEmpty()) {
             launchHydration(requestId = requestId, entries = playbackEntries)
@@ -159,7 +155,9 @@ object TraktProgressRepository {
         }.getOrNull()
 
         if (completedEntries == null) {
-            _uiState.value = _uiState.value.copy(
+            // History fetch failed — still publish playback entries
+            _uiState.value = TraktProgressUiState(
+                entries = playbackEntries,
                 isLoading = false,
                 errorMessage = null,
                 hasLoadedRemoteProgress = false,

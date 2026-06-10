@@ -35,8 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -329,12 +331,14 @@ fun HomeHeroSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            var dotScrollJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
                             items.forEachIndexed { index, _ ->
                                 val activeFraction = heroPageVisibility(pagerState, index)
                                 Box(
                                     modifier = Modifier
                                         .clickable {
-                                            coroutineScope.launch {
+                                            dotScrollJob?.cancel()
+                                            dotScrollJob = coroutineScope.launch {
                                                 pagerState.animateScrollToPage(index)
                                             }
                                         }

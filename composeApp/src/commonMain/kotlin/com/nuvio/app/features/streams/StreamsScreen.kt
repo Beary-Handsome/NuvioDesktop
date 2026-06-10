@@ -76,6 +76,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.nuvio.app.core.ui.desktopContextMenuPointer
+import androidx.compose.material3.Button
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -812,7 +813,19 @@ internal fun StreamList(
 
             !hasAnyStreams && !uiState.isAnyLoading -> {
                 item {
-                    EmptyStateBlock(reason = uiState.emptyStateReason)
+                    EmptyStateBlock(
+                        reason = uiState.emptyStateReason,
+                        onRetry = {
+                            StreamsRepository.load(
+                                type = type,
+                                videoId = videoId,
+                                parentMetaId = parentMetaId,
+                                season = seasonNumber,
+                                episode = episodeNumber,
+                                manualSelection = manualSelection,
+                            )
+                        },
+                    )
                 }
             }
 
@@ -1284,6 +1297,7 @@ private fun LoadingStateBlock(modifier: Modifier = Modifier) {
 private fun EmptyStateBlock(
     reason: StreamsEmptyStateReason?,
     modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
 ) {
     val title: String
     val message: String
@@ -1338,6 +1352,12 @@ private fun EmptyStateBlock(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
         )
+        if (onRetry != null && (reason == StreamsEmptyStateReason.StreamFetchFailed || reason == StreamsEmptyStateReason.NoStreamsFound)) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = onRetry) {
+                Text(stringResource(Res.string.action_retry))
+            }
+        }
     }
 }
 

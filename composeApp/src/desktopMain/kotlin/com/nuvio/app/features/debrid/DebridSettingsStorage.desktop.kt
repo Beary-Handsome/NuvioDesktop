@@ -18,6 +18,9 @@ internal actual object DebridSettingsStorage {
     private const val preferredResolverProviderIdKey = "preferred_resolver_provider_id"
     private const val torboxApiKeyKey = "torbox_api_key"
     private const val realDebridApiKeyKey = "real_debrid_api_key"
+    private const val premiumizeApiKeyKey = "provider_api_key_premiumize"
+    private const val alldebridApiKeyKey = "provider_api_key_alldebrid"
+    private const val easynewsApiKeyKey = "provider_api_key_easynews"
     private const val instantPlaybackPreparationLimitKey = "instant_playback_preparation_limit"
     private const val streamMaxResultsKey = "stream_max_results"
     private const val streamSortModeKey = "stream_sort_mode"
@@ -35,6 +38,9 @@ internal actual object DebridSettingsStorage {
         preferredResolverProviderIdKey,
         torboxApiKeyKey,
         realDebridApiKeyKey,
+        premiumizeApiKeyKey,
+        alldebridApiKeyKey,
+        easynewsApiKeyKey,
         instantPlaybackPreparationLimitKey,
         streamMaxResultsKey,
         streamSortModeKey,
@@ -165,6 +171,9 @@ internal actual object DebridSettingsStorage {
         loadPreferredResolverProviderId()?.let { put(preferredResolverProviderIdKey, encodeSyncString(it)) }
         loadTorboxApiKey()?.let { put(torboxApiKeyKey, encodeSyncString(it)) }
         loadRealDebridApiKey()?.let { put(realDebridApiKeyKey, encodeSyncString(it)) }
+        loadProviderApiKey("premiumize")?.let { put(premiumizeApiKeyKey, encodeSyncString(it)) }
+        loadProviderApiKey("alldebrid")?.let { put(alldebridApiKeyKey, encodeSyncString(it)) }
+        loadProviderApiKey("easynews")?.let { put(easynewsApiKeyKey, encodeSyncString(it)) }
         loadInstantPlaybackPreparationLimit()?.let { put(instantPlaybackPreparationLimitKey, encodeSyncInt(it)) }
         loadStreamMaxResults()?.let { put(streamMaxResultsKey, encodeSyncInt(it)) }
         loadStreamSortMode()?.let { put(streamSortModeKey, encodeSyncString(it)) }
@@ -185,6 +194,9 @@ internal actual object DebridSettingsStorage {
         payload.decodeSyncString(preferredResolverProviderIdKey)?.let(::savePreferredResolverProviderId)
         payload.decodeSyncString(torboxApiKeyKey)?.let(::saveTorboxApiKey)
         payload.decodeSyncString(realDebridApiKeyKey)?.let(::saveRealDebridApiKey)
+        payload.decodeSyncString(premiumizeApiKeyKey)?.let { saveProviderApiKey("premiumize", it) }
+        payload.decodeSyncString(alldebridApiKeyKey)?.let { saveProviderApiKey("alldebrid", it) }
+        payload.decodeSyncString(easynewsApiKeyKey)?.let { saveProviderApiKey("easynews", it) }
         payload.decodeSyncInt(instantPlaybackPreparationLimitKey)?.let(::saveInstantPlaybackPreparationLimit)
         payload.decodeSyncInt(streamMaxResultsKey)?.let(::saveStreamMaxResults)
         payload.decodeSyncString(streamSortModeKey)?.let(::saveStreamSortMode)
