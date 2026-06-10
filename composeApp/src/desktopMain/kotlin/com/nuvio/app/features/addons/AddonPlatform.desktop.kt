@@ -64,9 +64,9 @@ internal actual object AddonStorage {
 // emulator/network setups) and we don't override the proxy, so Windows users
 // keep their system proxy by default.
 private val addonHttpClient = OkHttpClient.Builder()
-    .connectTimeout(60, TimeUnit.SECONDS)
-    .readTimeout(60, TimeUnit.SECONDS)
-    .writeTimeout(60, TimeUnit.SECONDS)
+    .connectTimeout(15, TimeUnit.SECONDS)
+    .readTimeout(15, TimeUnit.SECONDS)
+    .writeTimeout(15, TimeUnit.SECONDS)
     .followRedirects(true)
     .followSslRedirects(true)
     .build()

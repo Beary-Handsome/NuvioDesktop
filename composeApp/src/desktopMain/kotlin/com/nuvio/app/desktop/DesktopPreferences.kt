@@ -45,9 +45,11 @@ internal object DesktopPreferences {
     private fun encodePathPart(value: String): String =
         keyEncoder.encodeToString(value.toByteArray(StandardCharsets.UTF_8))
 
+    @Synchronized
     fun contains(namespace: String, key: String): Boolean =
         keyFile(namespace, key).exists()
 
+    @Synchronized
     fun getString(namespace: String, key: String): String? =
         keyFile(namespace, key)
             .takeIf(Path::exists)
@@ -80,6 +82,7 @@ internal object DesktopPreferences {
         }
     }
 
+    @Synchronized
     fun getBoolean(namespace: String, key: String): Boolean? =
         getString(namespace, key)?.toBooleanStrictOrNull()
 
@@ -88,6 +91,7 @@ internal object DesktopPreferences {
         putString(namespace, key, value.toString())
     }
 
+    @Synchronized
     fun getInt(namespace: String, key: String): Int? =
         getString(namespace, key)?.toIntOrNull()
 
@@ -96,6 +100,7 @@ internal object DesktopPreferences {
         putString(namespace, key, value.toString())
     }
 
+    @Synchronized
     fun getFloat(namespace: String, key: String): Float? =
         getString(namespace, key)?.toFloatOrNull()
 
@@ -104,6 +109,7 @@ internal object DesktopPreferences {
         putString(namespace, key, value.toString())
     }
 
+    @Synchronized
     fun getStringSet(namespace: String, key: String): Set<String>? {
         val raw = getString(namespace, key) ?: return null
         if (raw.isEmpty()) return emptySet()

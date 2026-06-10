@@ -110,7 +110,8 @@ object ProfileRepository {
             return
         }
         runCatching {
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profiles")
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            val result = supabase.postgrest.rpc("sync_pull_profiles")
             val profiles = result.decodeList<NuvioProfile>()
             _state.value = _state.value.copy(
                 profiles = profiles.sortedBy { it.profileIndex },
@@ -170,7 +171,8 @@ object ProfileRepository {
             val params = buildJsonObject {
                 put("p_profiles", json.encodeToJsonElement(profiles))
             }
-            SupabaseProvider.client.postgrest.rpc("sync_push_profiles", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            supabase.postgrest.rpc("sync_push_profiles", params)
             pullProfiles()
         }.onFailure { e ->
             log.e(e) { "Failed to push profiles" }
@@ -259,7 +261,8 @@ object ProfileRepository {
         }
         runCatching {
             val params = buildJsonObject { put("p_profile_id", profileIndex) }
-            SupabaseProvider.client.postgrest.rpc("sync_delete_profile_data", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            supabase.postgrest.rpc("sync_delete_profile_data", params)
             pullProfiles()
         }.onFailure { e ->
             log.e(e) { "Failed to delete profile $profileIndex" }
@@ -276,7 +279,8 @@ object ProfileRepository {
                 put("p_profile_id", profileIndex)
                 put("p_pin", pin)
             }
-            val result = SupabaseProvider.client.postgrest.rpc("verify_profile_pin", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return verifyPinLocally(profileIndex, pin)
+            val result = supabase.postgrest.rpc("verify_profile_pin", params)
             result.decodeSingle<PinVerifyResult>().also { verifyResult ->
                 if (verifyResult.unlocked) {
                     rememberVerifiedPin(profileIndex = profileIndex, pin = pin)
@@ -299,7 +303,8 @@ object ProfileRepository {
                 put("p_pin", pin)
                 currentPin?.let { put("p_current_pin", it) }
             }
-            SupabaseProvider.client.postgrest.rpc("set_profile_pin", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return@runCatching
+            supabase.postgrest.rpc("set_profile_pin", params)
             pullProfiles()
             rememberVerifiedPin(profileIndex = profileIndex, pin = pin)
             PinVerifyResult(unlocked = true)
@@ -320,7 +325,8 @@ object ProfileRepository {
                 put("p_profile_id", profileIndex)
                 currentPin?.let { put("p_current_pin", it) }
             }
-            SupabaseProvider.client.postgrest.rpc("clear_profile_pin", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return@runCatching
+            supabase.postgrest.rpc("clear_profile_pin", params)
             pullProfiles()
             ProfilePinCacheStorage.removePayload(profileIndex)
             PinVerifyResult(unlocked = true)
@@ -337,7 +343,8 @@ object ProfileRepository {
                 put("p_account_password", accountPassword)
                 put("p_profile_id", profileIndex)
             }
-            SupabaseProvider.client.postgrest.rpc("clear_profile_pin_with_account_password", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            supabase.postgrest.rpc("clear_profile_pin_with_account_password", params)
             pullProfiles()
             ProfilePinCacheStorage.removePayload(profileIndex)
         }.onFailure { e ->
@@ -347,7 +354,8 @@ object ProfileRepository {
 
     suspend fun pullProfileLocks(): List<ProfileLockState> {
         return runCatching {
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profile_locks")
+            val supabase = SupabaseProvider.clientOrNull ?: return@runCatching emptyList()
+            val result = supabase.postgrest.rpc("sync_pull_profile_locks")
             result.decodeList<ProfileLockState>()
         }.getOrElse { e ->
             log.e(e) { "Failed to pull profile locks" }

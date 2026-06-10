@@ -172,7 +172,8 @@ object LibraryRepository {
                 put("p_limit", 500)
                 put("p_offset", 0)
             }
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_library", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            val result = supabase.postgrest.rpc("sync_pull_library", params)
             val serverItems = result.decodeList<LibrarySyncItem>()
             itemsById = serverItems.map { it.toLibraryItem() }.associateBy { it.id }.toMutableMap()
             hasLoaded = true
@@ -340,7 +341,8 @@ object LibraryRepository {
                     put("p_profile_id", profileId)
                     put("p_items", json.encodeToJsonElement(syncItems))
                 }
-                SupabaseProvider.client.postgrest.rpc("sync_push_library", params)
+                val supabase = SupabaseProvider.clientOrNull ?: return@runCatching
+                supabase.postgrest.rpc("sync_push_library", params)
             }.onFailure { e ->
                 log.e(e) { "Failed to push library to server" }
             }

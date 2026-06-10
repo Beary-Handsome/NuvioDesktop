@@ -1720,6 +1720,7 @@ private fun DebridBasicAuthDialog(
     var username by rememberSaveable(currentValue) { mutableStateOf(parts.getOrElse(0) { "" }) }
     var password by rememberSaveable(currentValue) { mutableStateOf(parts.getOrElse(1) { "" }) }
     var isSaving by rememberSaveable(providerId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     BasicAlertDialog(onDismissRequest = onDismiss) {
         DebridDialogSurface(title = title) {
@@ -1774,10 +1775,12 @@ private fun DebridBasicAuthDialog(
                 Button(
                     onClick = {
                         val credential = "${username.trim()}:${password.trim()}"
-                        isSaving = true
-                        onSave(credential)
-                        isSaving = false
-                        onDismiss()
+                        scope.launch {
+                            isSaving = true
+                            runCatching { onSave(credential) }
+                            isSaving = false
+                            onDismiss()
+                        }
                     },
                     enabled = username.isNotBlank() && password.isNotBlank() && !isSaving,
                 ) {

@@ -2475,12 +2475,20 @@ fun PlayerScreen(
                     } else {
                         playerController?.selectSubtitleTrack(index)
                     }
+                    scope.launch {
+                        delay(200)
+                        showSubtitleModal = false
+                    }
                 },
                 onAddonSubtitleSelected = { addon ->
                     selectedAddonSubtitleId = addon.id
                     selectedSubtitleIndex = -1
                     useCustomSubtitles = true
                     playerController?.setSubtitleUri(addon.url)
+                    scope.launch {
+                        delay(200)
+                        showSubtitleModal = false
+                    }
                 },
                 onFetchAddonSubtitles = ::fetchAddonSubtitlesForActiveItem,
                 onStyleChanged = PlayerSettingsRepository::setSubtitleStyle,

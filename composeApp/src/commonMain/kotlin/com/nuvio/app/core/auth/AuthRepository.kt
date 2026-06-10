@@ -119,7 +119,7 @@ object AuthRepository {
         val wasAnonymous = AuthStorage.loadAnonymousUserId() != null
         AuthStorage.clearAnonymousUserId()
         if (!wasAnonymous) {
-            SupabaseProvider.client.auth.signOut()
+            SupabaseProvider.clientOrNull?.auth?.signOut()
         }
         _state.value = AuthState.Unauthenticated
         LocalAccountDataCleaner.wipe()
@@ -130,8 +130,9 @@ object AuthRepository {
 
     suspend fun deleteAccount(): Result<Unit> = runCatching {
         _error.value = null
-        SupabaseProvider.client.functions.invoke("delete-account")
-        SupabaseProvider.client.auth.signOut()
+        val supabase = SupabaseProvider.clientOrNull ?: error("Supabase is not configured")
+        supabase.functions.invoke("delete-account")
+        supabase.auth.signOut()
         LocalAccountDataCleaner.wipe()
     }.onFailure { e ->
         log.e(e) { "Auth account deletion failed" }

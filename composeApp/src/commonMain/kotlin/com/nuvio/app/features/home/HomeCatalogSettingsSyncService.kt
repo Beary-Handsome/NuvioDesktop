@@ -80,7 +80,8 @@ object HomeCatalogSettingsSyncService {
                 put("p_profile_id", profileId)
                 put("p_platform", MOBILE_SYNC_PLATFORM)
             }
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_home_catalog_settings", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            val result = supabase.postgrest.rpc("sync_pull_home_catalog_settings", params)
             val blobs = result.decodeList<SupabaseHomeCatalogSettingsBlob>()
             val blob = blobs.firstOrNull()
 
@@ -149,7 +150,8 @@ object HomeCatalogSettingsSyncService {
                 put("p_platform", MOBILE_SYNC_PLATFORM)
                 put("p_settings_json", jsonElement)
             }
-            SupabaseProvider.client.postgrest.rpc("sync_push_home_catalog_settings", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            supabase.postgrest.rpc("sync_push_home_catalog_settings", params)
             log.d { "pushToRemote — success" }
         }.onFailure { e ->
             log.e(e) { "pushToRemote — FAILED" }

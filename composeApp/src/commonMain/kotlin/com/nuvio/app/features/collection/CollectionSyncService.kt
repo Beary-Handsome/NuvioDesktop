@@ -48,7 +48,8 @@ object CollectionSyncService {
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
             }
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_collections", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            val result = supabase.postgrest.rpc("sync_pull_collections", params)
             val blobs = result.decodeList<SupabaseCollectionBlob>()
             val blob = blobs.firstOrNull()
 
@@ -111,7 +112,8 @@ object CollectionSyncService {
                 put("p_profile_id", profileId)
                 put("p_collections_json", jsonElement)
             }
-            SupabaseProvider.client.postgrest.rpc("sync_push_collections", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return
+            supabase.postgrest.rpc("sync_push_collections", params)
             log.d { "pushToRemote — success" }
         }.onFailure { e ->
             log.e(e) { "pushToRemote — FAILED" }

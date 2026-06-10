@@ -31,7 +31,8 @@ object SupabaseWatchedSyncAdapter : WatchedSyncAdapter {
                 put("p_page", page)
                 put("p_page_size", pageSize)
             }
-            val result = SupabaseProvider.client.postgrest.rpc("sync_pull_watched_items", params)
+            val supabase = SupabaseProvider.clientOrNull ?: return emptyList()
+            val result = supabase.postgrest.rpc("sync_pull_watched_items", params)
             val pageItems = result.decodeList<WatchedSyncItem>()
             serverItems += pageItems
 
@@ -69,7 +70,8 @@ object SupabaseWatchedSyncAdapter : WatchedSyncAdapter {
             put("p_profile_id", profileId)
             put("p_items", json.encodeToJsonElement(syncItems))
         }
-        SupabaseProvider.client.postgrest.rpc("sync_push_watched_items", params)
+        val supabase = SupabaseProvider.clientOrNull ?: return
+        supabase.postgrest.rpc("sync_push_watched_items", params)
     }
 
     override suspend fun delete(
@@ -87,7 +89,8 @@ object SupabaseWatchedSyncAdapter : WatchedSyncAdapter {
             put("p_profile_id", profileId)
             put("p_keys", json.encodeToJsonElement(keys))
         }
-        SupabaseProvider.client.postgrest.rpc("sync_delete_watched_items", params)
+        val supabase = SupabaseProvider.clientOrNull ?: return
+        supabase.postgrest.rpc("sync_delete_watched_items", params)
     }
 }
 
