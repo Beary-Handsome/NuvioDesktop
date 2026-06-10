@@ -166,17 +166,6 @@ internal fun NuvioDesktopPlayerOverlay(
             else -> {}
         }
 
-        // Back button ALWAYS visible (outside AnimatedVisibility) so it's
-        // always clickable even when controls are hidden
-        if (onBack != null) {
-            HoverIconButton(
-                icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "Back",
-                onClick = onBack,
-                modifier = Modifier.padding(start = 20.dp, top = 16.dp),
-            )
-        }
-
         AnimatedVisibility(
             visible = controlsVisible || state.phase == DesktopPlayerPhase.Idle,
             enter = fadeIn(animationSpec = tween(NuvioAnimation.STANDARD_MS)),
@@ -214,16 +203,20 @@ internal fun NuvioDesktopPlayerOverlay(
                         .fillMaxSize()
                         .padding(horizontal = 20.dp),
                 ) {
-                    // Top bar: title, settings, fullscreen (back button is outside AnimatedVisibility)
+                    // Top bar: back, title, settings, fullscreen
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Spacer for back button area (button is always-visible, outside AnimatedVisibility)
                         if (onBack != null) {
-                            Spacer(Modifier.width(48.dp))
+                            HoverIconButton(
+                                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                onClick = onBack,
+                            )
+                            Spacer(Modifier.width(12.dp))
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
