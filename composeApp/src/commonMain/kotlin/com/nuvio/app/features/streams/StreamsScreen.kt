@@ -487,6 +487,16 @@ private fun MobileStreamsLayout(
                         onStreamLongPress = onStreamLongPress,
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
+                        onRetry = {
+                            StreamsRepository.load(
+                                type = type,
+                                videoId = videoId,
+                                parentMetaId = parentMetaId,
+                                season = seasonNumber,
+                                episode = episodeNumber,
+                                manualSelection = manualSelection,
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -784,6 +794,7 @@ internal fun StreamList(
     onStreamLongPress: (StreamItem) -> Unit,
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val filteredGroups = uiState.filteredGroups
@@ -815,16 +826,7 @@ internal fun StreamList(
                 item {
                     EmptyStateBlock(
                         reason = uiState.emptyStateReason,
-                        onRetry = {
-                            StreamsRepository.load(
-                                type = type,
-                                videoId = videoId,
-                                parentMetaId = parentMetaId,
-                                season = seasonNumber,
-                                episode = episodeNumber,
-                                manualSelection = manualSelection,
-                            )
-                        },
+                        onRetry = onRetry,
                     )
                 }
             }
