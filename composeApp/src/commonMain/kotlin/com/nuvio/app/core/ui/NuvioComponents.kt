@@ -59,6 +59,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -253,26 +256,33 @@ fun NuvioBackButton(
     iconSize: Dp = 24.dp,
     contentDescription: String = stringResource(Res.string.action_back),
 ) {
-    // Use IconButton for proper Material touch handling — ensures click
-    // events are consumed correctly even when overlaid on scrollable content
-    IconButton(
-        onClick = onClick,
-        modifier = modifier.size(buttonSize.coerceAtLeast(48.dp)),
+    Box(
+        modifier = modifier
+            .size(buttonSize.coerceAtLeast(48.dp))
+            .clip(shape)
+            .background(containerColor)
+            // Consume pointer events at Initial pass — BEFORE any parent
+            // scroll handler can intercept them. This is the only reliable
+            // way to make overlaid buttons work on top of scrollable content.
+            .pointerInput(onClick) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    down.consume()
+                    val up = waitForUpOrCancellation(pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (up != null) {
+                        up.consume()
+                        onClick()
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(buttonSize)
-                .clip(shape)
-                .background(containerColor),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = contentDescription,
-                tint = contentColor,
-                modifier = Modifier.size(iconSize),
-            )
-        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(iconSize),
+        )
     }
 }
 
