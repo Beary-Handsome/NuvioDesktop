@@ -135,37 +135,46 @@ internal fun NuvioDesktopPlayerOverlay(
                 } else false
             },
     ) {
-        // Video surface with double-click fullscreen — ONLY on the surface,
-        // not on the controls overlay, so buttons remain clickable
+        // Video surface — no pointer interception here, let clicks pass through
+        videoSurface()
+
+        // Clickable overlay for play/pause (single click) and fullscreen (double click)
+        // This is BELOW the controls in composition order, so controls get clicks first
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(onFullscreenToggle) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        down.consume()
-                        val up = waitForUpOrCancellation()
-                        if (up != null) {
-                            up.consume()
-                            val now = System.currentTimeMillis()
-                            if (now - lastClickTime in 50..400) {
-                                onFullscreenToggle?.invoke()
-                                lastClickTime = 0L
-                            } else {
-                                lastClickTime = now
-                                onActivity()
-                            }
-                        }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastClickTime in 50..400) {
+                        onFullscreenToggle?.invoke()
+                        lastClickTime = 0L
+                    } else {
+                        // Single click: toggle play/pause + show controls
+                        if (isPlaying) controller.pause() else controller.play()
+                        lastClickTime = now
                     }
+                    onActivity()
                 },
-        ) {
-            videoSurface()
-        }
+        )
 
         when (state.phase) {
             DesktopPlayerPhase.Idle -> IdleOverlay()
             DesktopPlayerPhase.Buffering -> BufferingOverlay()
             else -> {}
+        }
+
+        // Back button ALWAYS visible (outside AnimatedVisibility) so it's
+        // always clickable even when controls are hidden
+        if (onBack != null) {
+            HoverIconButton(
+                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "Back",
+                onClick = onBack,
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp),
+            )
         }
 
         AnimatedVisibility(
@@ -205,20 +214,16 @@ internal fun NuvioDesktopPlayerOverlay(
                         .fillMaxSize()
                         .padding(horizontal = 20.dp),
                 ) {
-                    // Top bar: back, title, settings, fullscreen
+                    // Top bar: title, settings, fullscreen (back button is outside AnimatedVisibility)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // Spacer for back button area (button is always-visible, outside AnimatedVisibility)
                         if (onBack != null) {
-                            HoverIconButton(
-                                icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back",
-                                onClick = onBack,
-                            )
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(48.dp))
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
@@ -399,6 +404,7 @@ private fun HoverIconButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     size: Dp = 36.dp,
     iconSize: Dp = 20.dp,
     showSpinner: Boolean = false,
@@ -407,7 +413,7 @@ private fun HoverIconButton(
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .clip(CircleShape)
             .background(
