@@ -139,7 +139,7 @@ internal fun NuvioDesktopPlayerOverlay(
             }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp) {
-                    when (event.key) {
+                    val handled = when (event.key) {
                         Key.Escape -> { onBack?.invoke(); true }
                         Key.F -> { onFullscreenToggle?.invoke(); true }
                         Key.M -> {
@@ -149,6 +149,8 @@ internal fun NuvioDesktopPlayerOverlay(
                         }
                         else -> handleKeyboardShortcut(event, controller, state)
                     }
+                    if (handled) onActivity() // Show controls on any keyboard action
+                    handled
                 } else false
             },
     ) {
