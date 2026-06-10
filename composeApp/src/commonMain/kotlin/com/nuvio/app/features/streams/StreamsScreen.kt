@@ -257,6 +257,16 @@ fun StreamsScreen(
                     onStreamSelected(stream, positionMs, progressFraction)
                 },
                 onStreamLongPress = { stream -> streamActionsTarget = stream },
+                onRetry = {
+                    StreamsRepository.load(
+                        type = type,
+                        videoId = videoId,
+                        parentMetaId = parentMetaId,
+                        season = seasonNumber,
+                        episode = episodeNumber,
+                        manualSelection = manualSelection,
+                    )
+                },
             )
         }
 
@@ -404,6 +414,7 @@ private fun MobileStreamsLayout(
     resumeProgressFraction: Float?,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -487,16 +498,7 @@ private fun MobileStreamsLayout(
                         onStreamLongPress = onStreamLongPress,
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
-                        onRetry = {
-                            StreamsRepository.load(
-                                type = type,
-                                videoId = videoId,
-                                parentMetaId = parentMetaId,
-                                season = seasonNumber,
-                                episode = episodeNumber,
-                                manualSelection = manualSelection,
-                            )
-                        },
+                        onRetry = onRetry,
                         modifier = Modifier.weight(1f),
                     )
                 }
