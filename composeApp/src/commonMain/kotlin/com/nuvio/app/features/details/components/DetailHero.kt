@@ -43,6 +43,7 @@ fun DetailHero(
         modifier = modifier.fillMaxWidth(),
     ) {
         val heroHeight = detailHeroHeight(maxWidth, isTablet)
+        val heroWidth = maxWidth
 
         Box(
             modifier = Modifier
@@ -62,7 +63,7 @@ fun DetailHero(
                 val imageUrl = meta.background ?: meta.poster
                 val heroImageRequest = rememberSizedImageRequest(
                     imageUrl = imageUrl,
-                    width = maxWidth,
+                    width = heroWidth,
                     height = heroHeight,
                     memoryCacheKeyPrefix = "detail-hero",
                 )
