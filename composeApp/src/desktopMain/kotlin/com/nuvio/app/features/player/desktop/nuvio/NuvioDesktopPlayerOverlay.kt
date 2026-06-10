@@ -5,6 +5,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -113,21 +116,25 @@ internal fun NuvioDesktopPlayerOverlay(
             .focusable()
             .onPointerEvent(PointerEventType.Move) { onActivity() }
             .onPointerEvent(PointerEventType.Scroll) { onActivity() }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) {
-                // Double-click to toggle fullscreen
-                val now = System.currentTimeMillis()
-                if (now - lastClickTime in 50..350) {
-                    onFullscreenToggle?.invoke()
-                    lastClickTime = 0L
-                } else {
-                    // Single click: toggle play/pause
-                    if (isPlaying) controller.pause() else controller.play()
-                    lastClickTime = now
+            .pointerInput(onFullscreenToggle) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    val up = waitForUpOrCancellation()
+                    if (up != null) {
+                        up.consume()
+                        val now = System.currentTimeMillis()
+                        if (now - lastClickTime in 50..400) {
+                            // Double-click: toggle fullscreen
+                            onFullscreenToggle?.invoke()
+                            lastClickTime = 0L
+                        } else {
+                            lastClickTime = now
+                            // Single click: just show controls
+                            onActivity()
+                        }
+                    }
                 }
-                onActivity()
             }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp) {
