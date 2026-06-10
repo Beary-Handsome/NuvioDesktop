@@ -303,7 +303,8 @@ object ProfileRepository {
                 put("p_pin", pin)
                 currentPin?.let { put("p_current_pin", it) }
             }
-            val supabase = SupabaseProvider.clientOrNull ?: return@runCatching
+            val supabase = SupabaseProvider.clientOrNull
+                ?: return PinVerifyResult(unlocked = false, message = getString(Res.string.profile_pin_set_failed))
             supabase.postgrest.rpc("set_profile_pin", params)
             pullProfiles()
             rememberVerifiedPin(profileIndex = profileIndex, pin = pin)
@@ -325,7 +326,8 @@ object ProfileRepository {
                 put("p_profile_id", profileIndex)
                 currentPin?.let { put("p_current_pin", it) }
             }
-            val supabase = SupabaseProvider.clientOrNull ?: return@runCatching
+            val supabase = SupabaseProvider.clientOrNull
+                ?: return PinVerifyResult(unlocked = false, message = getString(Res.string.profile_pin_clear_failed))
             supabase.postgrest.rpc("clear_profile_pin", params)
             pullProfiles()
             ProfilePinCacheStorage.removePayload(profileIndex)
