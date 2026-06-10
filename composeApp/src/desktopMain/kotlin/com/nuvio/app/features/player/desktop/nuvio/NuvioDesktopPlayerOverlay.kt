@@ -139,24 +139,26 @@ internal fun NuvioDesktopPlayerOverlay(
         videoSurface()
 
         // Clickable overlay for play/pause (single click) and fullscreen (double click)
-        // This is BELOW the controls in composition order, so controls get clicks first
+        // Uses pointerInput instead of clickable to avoid spacebar triggering click
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastClickTime in 50..400) {
-                        onFullscreenToggle?.invoke()
-                        lastClickTime = 0L
-                    } else {
-                        // Single click: toggle play/pause + show controls
-                        if (isPlaying) controller.pause() else controller.play()
-                        lastClickTime = now
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastClickTime in 50..400) {
+                                onFullscreenToggle?.invoke()
+                                lastClickTime = 0L
+                            } else {
+                                if (isPlaying) controller.pause() else controller.play()
+                                lastClickTime = now
+                            }
+                            onActivity()
+                        }
                     }
-                    onActivity()
                 },
         )
 
