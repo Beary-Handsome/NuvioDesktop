@@ -302,7 +302,8 @@ actual class MpvMediampPlayer(
 
     override fun pauseImpl() {
         if (playbackState.value == PlaybackState.PAUSED) return
-        handle.command("cycle", "pause")
+        handle.setPropertyBoolean("pause", true)
+        playbackState.value = PlaybackState.PAUSED
     }
 
     override fun seekTo(positionMillis: Long) {

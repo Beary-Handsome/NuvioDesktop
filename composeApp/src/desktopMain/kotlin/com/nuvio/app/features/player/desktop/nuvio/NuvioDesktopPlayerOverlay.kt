@@ -571,10 +571,7 @@ private fun handleKeyboardShortcut(
     controller: PlayerEngineController,
     state: DesktopPlayerState,
 ): Boolean = when (event.key) {
-    Key.Spacebar -> {
-        if (state.phase == DesktopPlayerPhase.Playing) controller.pause() else controller.play()
-        true
-    }
+    // Spacebar handled by BindPlayerKeyboardShortcuts AWT dispatcher — don't duplicate
     Key.DirectionLeft -> {
         controller.seekBy(if (event.isShiftPressed) -60_000 else -5_000)
         true
