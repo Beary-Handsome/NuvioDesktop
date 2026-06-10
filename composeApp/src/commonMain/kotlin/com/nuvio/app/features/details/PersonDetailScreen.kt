@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.ui.zIndex
+import com.nuvio.app.core.ui.NuvioBackButton
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
@@ -145,20 +146,16 @@ fun PersonDetailScreen(
             }
 
         // Back button overlaid on top
-        IconButton(
+        NuvioBackButton(
             onClick = onBack,
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(start = 4.dp, top = 4.dp)
                 .align(Alignment.TopStart)
                 .zIndex(10f),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = stringResource(Res.string.action_back),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

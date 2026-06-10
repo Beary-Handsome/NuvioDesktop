@@ -83,6 +83,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
+import androidx.compose.ui.graphics.Color
+import com.nuvio.app.core.ui.NuvioBackButton
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -695,12 +697,11 @@ private fun CloudLibraryFilePicker(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(Res.string.action_back),
-                    )
-                }
+                NuvioBackButton(
+                    onClick = onBack,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.name,
