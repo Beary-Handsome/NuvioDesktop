@@ -546,6 +546,13 @@ fun PlayerScreen(
         var showAudioModal by remember { mutableStateOf(false) }
         var showSubtitleModal by remember { mutableStateOf(false) }
         var showVideoSettingsModal by remember { mutableStateOf(false) }
+        fun closeAllModals() {
+            showSubtitleModal = false
+            showAudioModal = false
+            showVideoSettingsModal = false
+            showSourcesPanel = false
+            showEpisodesPanel = false
+        }
         var audioTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
         var subtitleTracks by remember { mutableStateOf<List<SubtitleTrack>>(emptyList()) }
         var selectedAudioIndex by remember { mutableStateOf(-1) }
@@ -1483,6 +1490,7 @@ fun PlayerScreen(
                         showStreams = true,
                         selectedEpisode = nextVideo,
                     )
+                    closeAllModals()
                     showEpisodesPanel = true
                     showNextEpisodeCard = false
                 }
@@ -1508,8 +1516,8 @@ fun PlayerScreen(
                     episode = activeEpisodeNumber,
                 )
             }
+            closeAllModals()
             showSourcesPanel = true
-            showEpisodesPanel = false
             controlsVisible = false
         }
 
@@ -1520,8 +1528,8 @@ fun PlayerScreen(
                     playerMetaVideos = MetaDetailsRepository.fetch(parentMetaType, parentMetaId)?.videos ?: emptyList()
                 }
             }
+            closeAllModals()
             showEpisodesPanel = true
-            showSourcesPanel = false
             controlsVisible = false
         }
 
@@ -1975,6 +1983,15 @@ fun PlayerScreen(
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyUp) {
                         when (event.key) {
+                            Key.Escape -> when {
+                                showSubtitleModal -> { showSubtitleModal = false; true }
+                                showAudioModal -> { showAudioModal = false; true }
+                                showVideoSettingsModal -> { showVideoSettingsModal = false; true }
+                                showSourcesPanel -> { showSourcesPanel = false; true }
+                                showEpisodesPanel -> { showEpisodesPanel = false; true }
+                                showParentalGuide -> { showParentalGuide = false; true }
+                                else -> false // let overlay handle it for back navigation
+                            }
                             Key.F -> {
                                 toggleFullscreen()
                                 true
@@ -2187,14 +2204,16 @@ fun PlayerScreen(
                 resizeMode = resizeMode,
                 onSubtitleClick = {
                     refreshTracks()
+                    closeAllModals()
                     showSubtitleModal = true
                 },
                 onAudioClick = {
                     refreshTracks()
+                    closeAllModals()
                     showAudioModal = true
                 },
                 onVideoSettingsClick = if (isIos || isDesktop) {
-                    { showVideoSettingsModal = true }
+                    { closeAllModals(); showVideoSettingsModal = true }
                 } else { null },
                 onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
                 onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
@@ -2305,14 +2324,17 @@ fun PlayerScreen(
                     onMuteClick = ::toggleMute,
                     onSubtitleClick = {
                         refreshTracks()
+                        closeAllModals()
                         showSubtitleModal = true
                     },
                     onAudioClick = {
                         refreshTracks()
+                        closeAllModals()
                         showAudioModal = true
                     },
                     onVideoSettingsClick = if (isIos || isDesktop) {
                         {
+                            closeAllModals()
                             showVideoSettingsModal = true
                         }
                     } else {

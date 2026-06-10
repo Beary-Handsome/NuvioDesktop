@@ -326,24 +326,24 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (showLoadingOverlay == enabled) return
         showLoadingOverlay = enabled
-        publish()
         PlayerSettingsStorage.saveShowLoadingOverlay(enabled)
+        publish()
     }
 
     fun setResizeMode(mode: PlayerResizeMode) {
         ensureLoaded()
         if (resizeMode == mode) return
         resizeMode = mode
-        publish()
         PlayerSettingsStorage.saveResizeMode(mode.name)
+        publish()
     }
 
     fun setHoldToSpeedEnabled(enabled: Boolean) {
         ensureLoaded()
         if (holdToSpeedEnabled == enabled) return
         holdToSpeedEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveHoldToSpeedEnabled(enabled)
+        publish()
     }
 
     fun setHoldToSpeedValue(speed: Float) {
@@ -351,8 +351,8 @@ object PlayerSettingsRepository {
         val normalized = speed.coerceIn(1f, 4f)
         if (holdToSpeedValue == normalized) return
         holdToSpeedValue = normalized
-        publish()
         PlayerSettingsStorage.saveHoldToSpeedValue(normalized)
+        publish()
     }
 
     fun setExternalPlayerEnabled(enabled: Boolean) {
@@ -363,8 +363,8 @@ object PlayerSettingsRepository {
             PlayerSettingsStorage.saveExternalPlayerId(externalPlayerId)
         }
         externalPlayerEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveExternalPlayerEnabled(enabled)
+        publish()
     }
 
     fun setExternalPlayerId(playerId: String?) {
@@ -372,8 +372,8 @@ object PlayerSettingsRepository {
         val normalized = playerId?.takeIf { it.isNotBlank() }
         if (externalPlayerId == normalized) return
         externalPlayerId = normalized
-        publish()
         PlayerSettingsStorage.saveExternalPlayerId(normalized)
+        publish()
     }
 
     fun setPreferredAudioLanguage(language: String) {
@@ -381,8 +381,8 @@ object PlayerSettingsRepository {
         val normalized = normalizeLanguageCode(language) ?: AudioLanguageOption.DEVICE
         if (preferredAudioLanguage == normalized) return
         preferredAudioLanguage = normalized
-        publish()
         PlayerSettingsStorage.savePreferredAudioLanguage(normalized)
+        publish()
     }
 
     fun setSecondaryPreferredAudioLanguage(language: String?) {
@@ -390,8 +390,8 @@ object PlayerSettingsRepository {
         val normalized = normalizeLanguageCode(language)
         if (secondaryPreferredAudioLanguage == normalized) return
         secondaryPreferredAudioLanguage = normalized
-        publish()
         PlayerSettingsStorage.saveSecondaryPreferredAudioLanguage(normalized)
+        publish()
     }
 
     fun setPreferredSubtitleLanguage(language: String) {
@@ -399,8 +399,8 @@ object PlayerSettingsRepository {
         val normalized = normalizeLanguageCode(language) ?: SubtitleLanguageOption.NONE
         if (preferredSubtitleLanguage == normalized) return
         preferredSubtitleLanguage = normalized
-        publish()
         PlayerSettingsStorage.savePreferredSubtitleLanguage(normalized)
+        publish()
     }
 
     fun setSecondaryPreferredSubtitleLanguage(language: String?) {
@@ -408,8 +408,8 @@ object PlayerSettingsRepository {
         val normalized = normalizeLanguageCode(language)
         if (secondaryPreferredSubtitleLanguage == normalized) return
         secondaryPreferredSubtitleLanguage = normalized
-        publish()
         PlayerSettingsStorage.saveSecondaryPreferredSubtitleLanguage(normalized)
+        publish()
     }
 
     fun setSubtitleStyle(style: SubtitleStyleState) {
@@ -417,12 +417,12 @@ object PlayerSettingsRepository {
         if (subtitleStyle == style) return
         subtitleStyle = style
         subtitleDelayMs = style.subtitleDelayMs
-        publish()
         PlayerSettingsStorage.saveSubtitleTextColor(style.textColor.toStorageHexString())
         PlayerSettingsStorage.saveSubtitleOutlineEnabled(style.outlineEnabled)
         PlayerSettingsStorage.saveSubtitleFontSizeSp(style.fontSizeSp)
         PlayerSettingsStorage.saveSubtitleBottomOffset(style.bottomOffset)
         PlayerSettingsStorage.saveSubtitleDelayMs(style.subtitleDelayMs)
+        publish()
     }
 
     fun setSubtitleDelayMs(delayMs: Int) {
@@ -431,56 +431,56 @@ object PlayerSettingsRepository {
         if (subtitleDelayMs == clamped) return
         subtitleDelayMs = clamped
         subtitleStyle = subtitleStyle.copy(subtitleDelayMs = clamped)
-        publish()
         PlayerSettingsStorage.saveSubtitleDelayMs(clamped)
+        publish()
     }
 
     fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
         ensureLoaded()
         if (streamReuseLastLinkEnabled == enabled) return
         streamReuseLastLinkEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveStreamReuseLastLinkEnabled(enabled)
+        publish()
     }
 
     fun setStreamReuseLastLinkCacheHours(hours: Int) {
         ensureLoaded()
         if (streamReuseLastLinkCacheHours == hours) return
         streamReuseLastLinkCacheHours = hours
-        publish()
         PlayerSettingsStorage.saveStreamReuseLastLinkCacheHours(hours)
+        publish()
     }
 
     fun setDecoderPriority(priority: Int) {
         ensureLoaded()
         if (decoderPriority == priority) return
         decoderPriority = priority
-        publish()
         PlayerSettingsStorage.saveDecoderPriority(priority)
+        publish()
     }
 
     fun setMapDV7ToHevc(enabled: Boolean) {
         ensureLoaded()
         if (mapDV7ToHevc == enabled) return
         mapDV7ToHevc = enabled
-        publish()
         PlayerSettingsStorage.saveMapDV7ToHevc(enabled)
+        publish()
     }
 
     fun setTunnelingEnabled(enabled: Boolean) {
         ensureLoaded()
         if (tunnelingEnabled == enabled) return
         tunnelingEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveTunnelingEnabled(enabled)
+        publish()
     }
 
     fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
         ensureLoaded()
         if (streamAutoPlayMode == mode) return
         streamAutoPlayMode = mode
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayMode(mode.name)
+        publish()
     }
 
     fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
@@ -488,16 +488,16 @@ object PlayerSettingsRepository {
         val normalizedSource = normalizeStreamAutoPlaySource(source)
         if (streamAutoPlaySource == normalizedSource) return
         streamAutoPlaySource = normalizedSource
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlaySource(normalizedSource.name)
+        publish()
     }
 
     fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
         ensureLoaded()
         if (streamAutoPlaySelectedAddons == addons) return
         streamAutoPlaySelectedAddons = addons
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlaySelectedAddons(addons)
+        publish()
     }
 
     fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
@@ -505,128 +505,128 @@ object PlayerSettingsRepository {
         val normalizedPlugins = if (AppFeaturePolicy.pluginsEnabled) plugins else emptySet()
         if (streamAutoPlaySelectedPlugins == normalizedPlugins) return
         streamAutoPlaySelectedPlugins = normalizedPlugins
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlaySelectedPlugins(normalizedPlugins)
+        publish()
     }
 
     fun setStreamAutoPlayRegex(regex: String) {
         ensureLoaded()
         if (streamAutoPlayRegex == regex) return
         streamAutoPlayRegex = regex
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayRegex(regex)
+        publish()
     }
 
     fun setStreamAutoPlayTimeoutSeconds(seconds: Int) {
         ensureLoaded()
         if (streamAutoPlayTimeoutSeconds == seconds) return
         streamAutoPlayTimeoutSeconds = seconds
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayTimeoutSeconds(seconds)
+        publish()
     }
 
     fun setSkipIntroEnabled(enabled: Boolean) {
         ensureLoaded()
         if (skipIntroEnabled == enabled) return
         skipIntroEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveSkipIntroEnabled(enabled)
+        publish()
     }
 
     fun setAnimeSkipEnabled(enabled: Boolean) {
         ensureLoaded()
         if (animeSkipEnabled == enabled) return
         animeSkipEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveAnimeSkipEnabled(enabled)
+        publish()
     }
 
     fun setAnimeSkipClientId(clientId: String) {
         ensureLoaded()
         if (animeSkipClientId == clientId) return
         animeSkipClientId = clientId
-        publish()
         PlayerSettingsStorage.saveAnimeSkipClientId(clientId)
+        publish()
     }
 
     fun setIntroDbApiKey(apiKey: String) {
         ensureLoaded()
         if (introDbApiKey == apiKey) return
         introDbApiKey = apiKey
-        publish()
         PlayerSettingsStorage.saveIntroDbApiKey(apiKey)
+        publish()
     }
 
     fun setIntroSubmitEnabled(enabled: Boolean) {
         ensureLoaded()
         if (introSubmitEnabled == enabled) return
         introSubmitEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveIntroSubmitEnabled(enabled)
+        publish()
     }
 
     fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
         ensureLoaded()
         if (streamAutoPlayNextEpisodeEnabled == enabled) return
         streamAutoPlayNextEpisodeEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayNextEpisodeEnabled(enabled)
+        publish()
     }
 
     fun setStreamAutoPlayPreferBingeGroup(enabled: Boolean) {
         ensureLoaded()
         if (streamAutoPlayPreferBingeGroup == enabled) return
         streamAutoPlayPreferBingeGroup = enabled
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayPreferBingeGroup(enabled)
+        publish()
     }
 
     fun setStreamAutoPlayReuseBingeGroup(enabled: Boolean) {
         ensureLoaded()
         if (streamAutoPlayReuseBingeGroup == enabled) return
         streamAutoPlayReuseBingeGroup = enabled
-        publish()
         PlayerSettingsStorage.saveStreamAutoPlayReuseBingeGroup(enabled)
+        publish()
     }
 
     fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
         ensureLoaded()
         if (nextEpisodeThresholdMode == mode) return
         nextEpisodeThresholdMode = mode
-        publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdMode(mode.name)
+        publish()
     }
 
     fun setNextEpisodeThresholdPercent(percent: Float) {
         ensureLoaded()
         if (nextEpisodeThresholdPercent == percent) return
         nextEpisodeThresholdPercent = percent
-        publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdPercent(percent)
+        publish()
     }
 
     fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         ensureLoaded()
         if (nextEpisodeThresholdMinutesBeforeEnd == minutes) return
         nextEpisodeThresholdMinutesBeforeEnd = minutes
-        publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdMinutesBeforeEnd(minutes)
+        publish()
     }
 
     fun setUseLibass(enabled: Boolean) {
         ensureLoaded()
         if (useLibass == enabled) return
         useLibass = enabled
-        publish()
         PlayerSettingsStorage.saveUseLibass(enabled)
+        publish()
     }
 
     fun setLibassRenderType(renderType: String) {
         ensureLoaded()
         if (libassRenderType == renderType) return
         libassRenderType = renderType
-        publish()
         PlayerSettingsStorage.saveLibassRenderType(renderType)
+        publish()
     }
 
     fun setIosVideoOutputPreset(preset: IosVideoOutputPreset) {
@@ -659,98 +659,98 @@ object PlayerSettingsRepository {
             }
             IosVideoOutputPreset.Custom -> Unit
         }
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosToneMappingMode(mode: IosToneMappingMode) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosToneMappingMode = mode
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosTargetPrimaries(primaries: IosTargetPrimaries) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosTargetPrimaries = primaries
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosTargetTransfer(transfer: IosTargetTransfer) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosTargetTransfer = transfer
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosHardwareDecoderMode(mode: IosHardwareDecoderMode) {
         ensureLoaded()
         iosHardwareDecoderMode = mode
-        publish()
         PlayerSettingsStorage.saveIosHardwareDecoderMode(mode.name)
+        publish()
     }
 
     fun setIosExtendedDynamicRangeEnabled(enabled: Boolean) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosExtendedDynamicRangeEnabled = enabled
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosTargetColorspaceHintEnabled(enabled: Boolean) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosTargetColorspaceHintEnabled = enabled
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosHdrComputePeakEnabled(enabled: Boolean) {
         ensureLoaded()
         iosVideoOutputPreset = IosVideoOutputPreset.Custom
         iosHdrComputePeakEnabled = enabled
-        publish()
         saveIosVideoOutputSettings()
+        publish()
     }
 
     fun setIosDebandEnabled(enabled: Boolean) {
         ensureLoaded()
         iosDebandEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveIosDebandEnabled(enabled)
+        publish()
     }
 
     fun setIosInterpolationEnabled(enabled: Boolean) {
         ensureLoaded()
         iosInterpolationEnabled = enabled
-        publish()
         PlayerSettingsStorage.saveIosInterpolationEnabled(enabled)
+        publish()
     }
 
     fun setIosBrightness(value: Int) {
         ensureLoaded()
         iosBrightness = value.coerceIn(-50, 50)
-        publish()
         PlayerSettingsStorage.saveIosBrightness(iosBrightness)
+        publish()
     }
 
     fun setIosContrast(value: Int) {
         ensureLoaded()
         iosContrast = value.coerceIn(-50, 50)
-        publish()
         PlayerSettingsStorage.saveIosContrast(iosContrast)
+        publish()
     }
 
     fun setIosSaturation(value: Int) {
         ensureLoaded()
         iosSaturation = value.coerceIn(-50, 50)
-        publish()
         PlayerSettingsStorage.saveIosSaturation(iosSaturation)
+        publish()
     }
 
     fun getPlayerBackend(): PlayerBackendOption {
@@ -762,8 +762,8 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (playerBackend == option) return
         playerBackend = option
-        publish()
         PlayerSettingsStorage.savePlayerBackend(option.name)
+        publish()
     }
 
     fun getMpvConfigPath(): String {
@@ -775,8 +775,8 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (mpvConfigPath == path) return
         mpvConfigPath = path
-        publish()
         PlayerSettingsStorage.saveMpvConfigPath(path)
+        publish()
     }
 
     fun resetIosVideoOutputTuning() {
@@ -787,13 +787,13 @@ object PlayerSettingsRepository {
         iosGamma = 0
         iosDebandEnabled = false
         iosInterpolationEnabled = false
-        publish()
         PlayerSettingsStorage.saveIosBrightness(0)
         PlayerSettingsStorage.saveIosContrast(0)
         PlayerSettingsStorage.saveIosSaturation(0)
         PlayerSettingsStorage.saveIosGamma(0)
         PlayerSettingsStorage.saveIosDebandEnabled(false)
         PlayerSettingsStorage.saveIosInterpolationEnabled(false)
+        publish()
     }
 
     private fun saveIosVideoOutputSettings() {
