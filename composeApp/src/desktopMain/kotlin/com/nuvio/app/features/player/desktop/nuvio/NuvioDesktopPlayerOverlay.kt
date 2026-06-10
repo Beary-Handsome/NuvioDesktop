@@ -117,26 +117,6 @@ internal fun NuvioDesktopPlayerOverlay(
             .focusable()
             .onPointerEvent(PointerEventType.Move) { onActivity() }
             .onPointerEvent(PointerEventType.Scroll) { onActivity() }
-            .pointerInput(onFullscreenToggle) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    down.consume()
-                    val up = waitForUpOrCancellation()
-                    if (up != null) {
-                        up.consume()
-                        val now = System.currentTimeMillis()
-                        if (now - lastClickTime in 50..400) {
-                            // Double-click: toggle fullscreen
-                            onFullscreenToggle?.invoke()
-                            lastClickTime = 0L
-                        } else {
-                            lastClickTime = now
-                            // Single click: just show controls
-                            onActivity()
-                        }
-                    }
-                }
-            }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp) {
                     val handled = when (event.key) {
@@ -154,7 +134,32 @@ internal fun NuvioDesktopPlayerOverlay(
                 } else false
             },
     ) {
-        videoSurface()
+        // Video surface with double-click fullscreen — ONLY on the surface,
+        // not on the controls overlay, so buttons remain clickable
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(onFullscreenToggle) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        val up = waitForUpOrCancellation()
+                        if (up != null) {
+                            up.consume()
+                            val now = System.currentTimeMillis()
+                            if (now - lastClickTime in 50..400) {
+                                onFullscreenToggle?.invoke()
+                                lastClickTime = 0L
+                            } else {
+                                lastClickTime = now
+                                onActivity()
+                            }
+                        }
+                    }
+                },
+        ) {
+            videoSurface()
+        }
 
         when (state.phase) {
             DesktopPlayerPhase.Idle -> IdleOverlay()

@@ -261,20 +261,7 @@ fun NuvioBackButton(
             .size(buttonSize.coerceAtLeast(48.dp))
             .clip(shape)
             .background(containerColor)
-            // Consume pointer events at Initial pass — BEFORE any parent
-            // scroll handler can intercept them. This is the only reliable
-            // way to make overlaid buttons work on top of scrollable content.
-            .pointerInput(onClick) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    down.consume()
-                    val up = waitForUpOrCancellation(pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    if (up != null) {
-                        up.consume()
-                        onClick()
-                    }
-                }
-            },
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
