@@ -114,6 +114,7 @@ object TraktAuthRepository {
     fun onPinSubmitted(pin: String) {
         val trimmed = pin.trim()
         if (trimmed.isBlank()) return
+        if (_uiState.value.isLoading) return // Prevent double-submission
         scope.launch {
             publish(isLoading = true, errorMessage = null)
             exchangeAuthorizationCode(trimmed)
