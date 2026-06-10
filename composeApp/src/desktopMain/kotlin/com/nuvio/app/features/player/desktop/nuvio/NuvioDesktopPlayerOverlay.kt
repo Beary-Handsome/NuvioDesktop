@@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop.nuvio
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import com.nuvio.app.core.ui.NuvioAnimation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -169,8 +170,8 @@ internal fun NuvioDesktopPlayerOverlay(
 
         AnimatedVisibility(
             visible = controlsVisible || state.phase == DesktopPlayerPhase.Idle,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(300)),
+            enter = fadeIn(animationSpec = tween(NuvioAnimation.STANDARD_MS)),
+            exit = fadeOut(animationSpec = tween(NuvioAnimation.STANDARD_MS)),
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.fillMaxSize()) {

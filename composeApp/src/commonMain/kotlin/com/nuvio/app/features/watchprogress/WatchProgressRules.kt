@@ -1,5 +1,6 @@
 package com.nuvio.app.features.watchprogress
 
+import co.touchlab.kermit.Logger
 import com.nuvio.app.features.watching.domain.DefaultContinueWatchingLimit
 import com.nuvio.app.features.watching.domain.WatchingContentRef
 import com.nuvio.app.features.watching.domain.WatchingProgressRecord
@@ -20,6 +21,7 @@ private data class StoredWatchProgressPayload(
 )
 
 internal object WatchProgressCodec {
+    private val log = Logger.withTag("WatchProgressCodec")
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -29,6 +31,8 @@ internal object WatchProgressCodec {
         runCatching {
             json.decodeFromString<StoredWatchProgressPayload>(payload).entries
                 .map(WatchProgressEntry::normalizedCompletion)
+        }.onFailure { e ->
+            log.e { "WatchProgress: corrupted data detected, resetting. Error: ${e.message}" }
         }.getOrDefault(emptyList())
 
     fun encodeEntries(entries: Collection<WatchProgressEntry>): String =

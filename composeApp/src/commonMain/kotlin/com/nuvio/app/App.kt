@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.tween
+import com.nuvio.app.core.ui.NuvioAnimation
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -128,6 +129,7 @@ import com.nuvio.app.features.details.PersonDetailScreen
 import com.nuvio.app.features.details.TmdbEntityBrowseScreen
 import com.nuvio.app.features.tmdb.TmdbEntityKind
 import com.nuvio.app.features.home.HomeCatalogSection
+import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryItem
@@ -467,8 +469,8 @@ fun App() {
             targetState = gateScreen,
             label = "app_gate",
             transitionSpec = {
-                (fadeIn(tween(400)) + scaleIn(tween(400), initialScale = 0.94f))
-                    .togetherWith(fadeOut(tween(250)))
+                (fadeIn(tween(NuvioAnimation.SLOW_MS)) + scaleIn(tween(NuvioAnimation.SLOW_MS), initialScale = 0.94f))
+                    .togetherWith(fadeOut(tween(NuvioAnimation.STANDARD_MS)))
             },
         ) { currentGate ->
             when (currentGate) {
@@ -734,6 +736,7 @@ private fun MainAppContent(
                     previousConditionName == NetworkCondition.ServersUnreachable.name
                 ) {
                     NuvioToastController.show(getString(Res.string.network_back_online))
+                    HomeRepository.refresh(addonsUiState.addons.enabledAddons(), force = true)
                 }
             }
 

@@ -726,6 +726,11 @@ actual object PlayerSettingsStorage {
         saveInt(iosGammaKey, value)
     }
 
+    actual fun clearAll() {
+        val defaults = NSUserDefaults.standardUserDefaults
+        syncKeys.forEach { key -> defaults.removeObjectForKey(ProfileScopedKey.of(key)) }
+    }
+
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }

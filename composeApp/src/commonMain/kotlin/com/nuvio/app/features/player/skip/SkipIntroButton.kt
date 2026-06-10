@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import com.nuvio.app.core.ui.NuvioAnimation
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -95,8 +96,8 @@ fun SkipIntroButton(
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.8f),
-        exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
+        enter = fadeIn(tween(NuvioAnimation.STANDARD_MS)) + scaleIn(tween(NuvioAnimation.STANDARD_MS), initialScale = 0.8f),
+        exit = fadeOut(tween(NuvioAnimation.FAST_MS)) + scaleOut(tween(NuvioAnimation.FAST_MS), targetScale = 0.8f),
         modifier = modifier,
     ) {
         val shape = RoundedCornerShape(16.dp)

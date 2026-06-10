@@ -914,6 +914,10 @@ internal actual object PlayerSettingsStorage {
     actual fun loadIosGamma(): Int? = loadInt(iosGammaKey)
     actual fun saveIosGamma(value: Int) { saveInt(iosGammaKey, value) }
 
+    actual fun clearAll() {
+        DesktopPreferences.clearNode(preferencesName)
+    }
+
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }

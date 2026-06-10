@@ -152,6 +152,12 @@ object PlayerSettingsRepository {
         loadFromDisk()
     }
 
+    fun resetToDefaults() {
+        clearLocalState()
+        PlayerSettingsStorage.clearAll()
+        publish()
+    }
+
     fun clearLocalState() {
         hasLoaded = false
         showLoadingOverlay = true

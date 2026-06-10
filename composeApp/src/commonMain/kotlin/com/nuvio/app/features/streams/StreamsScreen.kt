@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
+import com.nuvio.app.core.ui.NuvioAnimation
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -317,8 +318,8 @@ fun StreamsScreen(
 
         AnimatedVisibility(
             visible = uiState.showDirectAutoPlayOverlay,
-            enter = fadeIn(animationSpec = tween(250)),
-            exit = fadeOut(animationSpec = tween(200)),
+            enter = fadeIn(animationSpec = tween(NuvioAnimation.STANDARD_MS)),
+            exit = fadeOut(animationSpec = tween(NuvioAnimation.FAST_MS)),
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(
@@ -1032,11 +1033,11 @@ private fun StreamCard(
             .shadow(
                 elevation = 2.dp,
                 shape = cardShape,
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.04f),
+                ambientColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.04f),
+                spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.04f),
             )
             .clip(cardShape)
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
             .combinedClickable(
                 enabled = enabled,
                 onClick = onClick,

@@ -77,6 +77,8 @@ object WatchedRepository {
         if (payload.isNotEmpty()) {
             val storedPayload = runCatching {
                 json.decodeFromString<StoredWatchedPayload>(payload)
+            }.onFailure { e ->
+                log.e { "Watched: corrupted data detected, resetting. Error: ${e.message}" }
             }.getOrDefault(StoredWatchedPayload())
             lastSuccessfulPushEpochMs = storedPayload.lastSuccessfulPushEpochMs
             itemsByKey = storedPayload.items

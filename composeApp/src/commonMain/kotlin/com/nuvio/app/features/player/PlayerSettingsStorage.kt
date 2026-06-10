@@ -114,6 +114,7 @@ internal expect object PlayerSettingsStorage {
     fun savePlayerBackend(option: String)
     fun loadMpvConfigPath(): String?
     fun saveMpvConfigPath(path: String)
+    fun clearAll()
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

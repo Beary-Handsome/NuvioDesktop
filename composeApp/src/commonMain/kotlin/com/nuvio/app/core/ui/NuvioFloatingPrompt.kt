@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
+import com.nuvio.app.core.ui.NuvioAnimation
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -116,8 +117,8 @@ fun NuvioFloatingPrompt(
     AnimatedVisibility(
         visibleState = visibilityState,
         modifier = modifier,
-        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it },
-        exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it },
+        enter = fadeIn(tween(NuvioAnimation.SLOW_MS)) + slideInVertically(tween(NuvioAnimation.SLOW_MS)) { it },
+        exit = fadeOut(tween(NuvioAnimation.STANDARD_MS)) + slideOutVertically(tween(NuvioAnimation.STANDARD_MS)) { it },
     ) {
         Box(
             modifier = Modifier
