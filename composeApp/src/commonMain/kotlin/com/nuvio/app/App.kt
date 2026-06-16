@@ -402,8 +402,10 @@ fun App() {
 
         fun enterProfileGate(profiles: List<NuvioProfile>, syncOnEnter: Boolean) {
             if (profiles.isEmpty()) {
-                autoSkipProfileSelection = true
-                gateScreen = AppGateScreen.ProfileSelection.name
+                // No profiles — auto-select profile 1 and skip to main.
+                // Desktop runs without Supabase, so profile creation would fail.
+                ProfileRepository.selectProfile(1)
+                gateScreen = AppGateScreen.Main.name
                 return
             }
 
