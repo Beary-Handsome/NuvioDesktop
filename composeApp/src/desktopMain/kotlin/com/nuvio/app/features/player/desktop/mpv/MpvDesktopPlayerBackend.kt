@@ -167,15 +167,20 @@ internal class MpvDesktopPlayerBackend private constructor(
                 player.resume()
                 runCatching { mpvHandle.setPropertyBoolean("pause", false) }
                     .onFailure { DesktopRuntimeLog.error("MPV unpause after load failed", it) }
-                // Ensure unpause sticks after MPV finishes async file loading
+                // Ensure unpause sticks after MPV finishes async file loading.
+                // Some systems (KDE/different GPU) take longer to initialize.
                 scope.launch {
-                    delay(200)
-                    if (!stopped && !nativeClosed) {
-                        runCatching { mpvHandle.setPropertyBoolean("pause", false) }
-                    }
-                    delay(500)
-                    if (!stopped && !nativeClosed) {
-                        runCatching { mpvHandle.setPropertyBoolean("pause", false) }
+                    for (delayMs in listOf(200L, 500L, 1000L, 2000L, 3000L)) {
+                        delay(delayMs)
+                        if (stopped || nativeClosed) break
+                        val isPaused = runCatching {
+                            mpvHandle.getMpvBooleanProperty("pause")
+                        }.getOrDefault(false)
+                        if (isPaused) {
+                            runCatching { mpvHandle.setPropertyBoolean("pause", false) }
+                        } else {
+                            break // Already playing, stop retrying
+                        }
                     }
                 }
             } else {
