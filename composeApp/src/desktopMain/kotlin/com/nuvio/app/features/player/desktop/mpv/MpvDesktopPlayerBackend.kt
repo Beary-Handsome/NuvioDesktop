@@ -575,10 +575,18 @@ internal class MpvDesktopPlayerBackend private constructor(
                 }
                 return
             }
-            if (!canReceiveCommands()) return
+            if (!canReceiveCommands()) {
+                // Even if state thinks we can't receive commands, try direct MPV unpause
+                // as a last resort — the Kotlin state might be out of sync with MPV
+                runCatching { mpvHandle.setPropertyBoolean("pause", false) }
+                return
+            }
             val before = snapshotForLog()
             val result = runCatching {
                 player.resume()
+                // Always force unpause directly on MPV regardless of Kotlin state,
+                // because resumeImpl() may be a no-op if state is already PLAYING
+                // while MPV is actually paused (state desync)
                 mpvHandle.setPropertyBoolean("pause", false)
             }
             DesktopRuntimeLog.info("MPV controller play before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
@@ -601,7 +609,11 @@ internal class MpvDesktopPlayerBackend private constructor(
             if (!canReceiveCommands()) return
             lastPauseAtMs = System.currentTimeMillis()
             val before = snapshotForLog()
-            val result = runCatching { player.pause() }
+            val result = runCatching {
+                player.pause()
+                // Force MPV pause directly in case Kotlin state is out of sync
+                mpvHandle.setPropertyBoolean("pause", true)
+            }
             DesktopRuntimeLog.info("MPV controller pause before=$before result=${result.getOrNull()} after=${snapshotForLog()}")
             result.onFailure { DesktopRuntimeLog.error("MPV controller pause failed", it) }
         }
